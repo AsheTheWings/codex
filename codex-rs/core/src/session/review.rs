@@ -102,6 +102,7 @@ pub(super) async fn spawn_review_thread(
 
     let review_turn_context = TurnContext {
         sub_id: review_turn_id.clone(),
+        client_user_message_id: std::sync::Mutex::new(None),
         trace_id: current_span_trace_id(),
         realtime_active: parent_turn_context.realtime_active,
         config: per_turn_config,

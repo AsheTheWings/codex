@@ -54,6 +54,7 @@ impl TurnEnvironment {
 #[derive(Debug)]
 pub struct TurnContext {
     pub(crate) sub_id: String,
+    pub(crate) client_user_message_id: std::sync::Mutex<Option<String>>,
     pub(crate) trace_id: Option<String>,
     pub(crate) realtime_active: bool,
     pub config: Arc<Config>,
@@ -225,6 +226,9 @@ impl TurnContext {
 
         Self {
             sub_id: self.sub_id.clone(),
+            client_user_message_id: std::sync::Mutex::new(
+                self.client_user_message_id.lock().unwrap().clone(),
+            ),
             trace_id: self.trace_id.clone(),
             realtime_active: self.realtime_active,
             config: Arc::new(config),
@@ -346,6 +350,7 @@ impl TurnContext {
         let workspace_roots = self.config.effective_workspace_roots();
         TurnContextItem {
             turn_id: Some(self.sub_id.clone()),
+            client_user_message_id: self.client_user_message_id.lock().unwrap().clone(),
             #[allow(deprecated)]
             cwd: self.cwd.to_path_buf(),
             workspace_roots: (!workspace_roots.is_empty()).then_some(workspace_roots),
@@ -528,6 +533,7 @@ impl Session {
         let extension_data = Arc::new(codex_extension_api::ExtensionData::new(sub_id.clone()));
         TurnContext {
             sub_id,
+            client_user_message_id: std::sync::Mutex::new(None),
             trace_id: current_span_trace_id(),
             realtime_active: false,
             config: per_turn_config.clone(),

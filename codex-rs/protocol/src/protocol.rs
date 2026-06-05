@@ -2885,6 +2885,8 @@ pub struct TurnContextNetworkItem {
 pub struct TurnContextItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_user_message_id: Option<String>,
     pub cwd: PathBuf,
     /// Effective workspace roots used to materialize symbolic
     /// `:workspace_roots` filesystem permissions in `permission_profile`.
