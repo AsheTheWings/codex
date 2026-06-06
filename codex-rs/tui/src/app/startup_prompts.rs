@@ -26,57 +26,6 @@ pub(super) fn emit_skill_load_warnings(app_event_tx: &AppEventSender, errors: &[
     }
 }
 
-pub(super) fn emit_project_config_warnings(app_event_tx: &AppEventSender, config: &Config) {
-    let mut disabled_folders = Vec::new();
-
-    for layer in config.config_layer_stack.get_layers(
-        ConfigLayerStackOrdering::LowestPrecedenceFirst,
-        /*include_disabled*/ true,
-    ) {
-        let ConfigLayerSource::Project { dot_codex_folder } = &layer.name else {
-            continue;
-        };
-        let Some(disabled_reason) = &layer.disabled_reason else {
-            continue;
-        };
-        disabled_folders.push((
-            dot_codex_folder.as_path().display().to_string(),
-            disabled_reason.clone(),
-        ));
-    }
-
-    if disabled_folders.is_empty() {
-        return;
-    }
-
-    let mut message = concat!(
-        "Project-local config, hooks, and exec policies are disabled in the following folders ",
-        "until the project is trusted, but skills still load.\n",
-    )
-    .to_string();
-    for (index, (folder, reason)) in disabled_folders.iter().enumerate() {
-        let display_index = index + 1;
-        message.push_str(&format!("    {display_index}. {folder}\n"));
-        message.push_str(&format!("       {reason}\n"));
-    }
-
-    app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
-        history_cell::new_warning_event(message),
-    )));
-}
-
-pub(super) fn emit_system_bwrap_warning(app_event_tx: &AppEventSender, config: &Config) {
-    let Some(message) =
-        codex_sandboxing::system_bwrap_warning(config.permissions.permission_profile())
-    else {
-        return;
-    };
-
-    app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
-        history_cell::new_warning_event(message),
-    )));
-}
-
 pub(super) fn should_show_model_migration_prompt(
     current_model: &str,
     target_model: &str,

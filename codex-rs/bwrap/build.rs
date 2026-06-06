@@ -50,6 +50,7 @@ fn try_build_bwrap() -> Result<(), String> {
 
     let mut build = cc::Build::new();
     build
+        .warnings(false)
         .file(src_dir.join("bubblewrap.c"))
         .file(src_dir.join("bind-mount.c"))
         .file(src_dir.join("network.c"))

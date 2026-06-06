@@ -5,7 +5,6 @@ members = [
     "agent-graph-store",
     "agent-identity",
     "backend-client",
-    "bwrap",
     "ansi-escape",
     "async-utils",
     "app-server",
