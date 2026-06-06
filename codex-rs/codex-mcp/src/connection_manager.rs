@@ -477,6 +477,32 @@ impl McpConnectionManager {
         server_infos
     }
 
+    pub async fn get_server_connection_status(&self, server_name: &str) -> String {
+        let Some(client) = self.clients.get(server_name) else {
+            return "not_started".to_string();
+        };
+        if !client.startup_complete.load(Ordering::Acquire) {
+            return "not_started".to_string();
+        }
+        match client.client().await {
+            Ok(_) => "connected".to_string(),
+            Err(_) => "failed".to_string(),
+        }
+    }
+
+    pub async fn list_tools_for_server(&self, server_name: &str) -> Option<Vec<ToolInfo>> {
+        let client = self.clients.get(server_name)?;
+        let server_tools = client.listed_tools().await?;
+        let tools: Vec<ToolInfo> = server_tools
+            .into_iter()
+            .map(|tool| self.with_server_metadata(tool))
+            .collect();
+        Some(normalize_tools_for_model_with_prefix(
+            tools,
+            self.prefix_mcp_tool_names,
+        ))
+    }
+
     /// Force-refresh codex apps tools by bypassing the in-process cache.
     ///
     /// On success, the refreshed tools replace the cache contents and the

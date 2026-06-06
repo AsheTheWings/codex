@@ -500,6 +500,12 @@ impl CodexThread {
         self.codex.session.get_config().await
     }
 
+    pub fn mcp_connection_manager(
+        &self,
+    ) -> Arc<tokio::sync::RwLock<codex_mcp::McpConnectionManager>> {
+        Arc::clone(&self.codex.session.services.mcp_connection_manager)
+    }
+
     pub fn multi_agent_version(&self) -> Option<MultiAgentVersion> {
         self.codex.session.multi_agent_version()
     }

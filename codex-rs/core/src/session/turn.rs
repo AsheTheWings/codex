@@ -117,6 +117,7 @@ use tracing::instrument;
 use tracing::trace;
 use tracing::trace_span;
 use tracing::warn;
+use uuid::Uuid;
 
 /// Takes initial turn input and runs a loop where, at each sampling request,
 /// the model replies with either:
@@ -1453,6 +1454,7 @@ async fn handle_plan_segments(
     turn_context: &TurnContext,
     state: &mut PlanModeStreamState,
     item_id: &str,
+    response_id: &str,
     segments: Vec<ProposedPlanSegment>,
 ) {
     for segment in segments {
@@ -1485,6 +1487,7 @@ async fn handle_plan_segments(
                     thread_id: sess.thread_id.to_string(),
                     turn_id: turn_context.sub_id.clone(),
                     item_id: item_id.to_string(),
+                    response_id: Some(response_id.to_string()),
                     delta,
                 };
                 sess.send_event(turn_context, EventMsg::AgentMessageContentDelta(event))
@@ -1516,6 +1519,7 @@ async fn emit_streamed_assistant_text_delta(
     turn_context: &TurnContext,
     plan_mode_state: Option<&mut PlanModeStreamState>,
     item_id: &str,
+    response_id: &str,
     parsed: ParsedAssistantTextDelta,
 ) {
     if parsed.is_empty() {
@@ -1528,7 +1532,15 @@ async fn emit_streamed_assistant_text_delta(
     }
     if let Some(state) = plan_mode_state {
         if !parsed.plan_segments.is_empty() {
-            handle_plan_segments(sess, turn_context, state, item_id, parsed.plan_segments).await;
+            handle_plan_segments(
+                sess,
+                turn_context,
+                state,
+                item_id,
+                response_id,
+                parsed.plan_segments,
+            )
+            .await;
         }
         return;
     }
@@ -1539,6 +1551,7 @@ async fn emit_streamed_assistant_text_delta(
         thread_id: sess.thread_id.to_string(),
         turn_id: turn_context.sub_id.clone(),
         item_id: item_id.to_string(),
+        response_id: Some(response_id.to_string()),
         delta: parsed.visible_text,
     };
     sess.send_event(turn_context, EventMsg::AgentMessageContentDelta(event))
@@ -1552,9 +1565,18 @@ async fn flush_assistant_text_segments_for_item(
     plan_mode_state: Option<&mut PlanModeStreamState>,
     parsers: &mut AssistantMessageStreamParsers,
     item_id: &str,
+    response_id: &str,
 ) {
     let parsed = parsers.finish_item(item_id);
-    emit_streamed_assistant_text_delta(sess, turn_context, plan_mode_state, item_id, parsed).await;
+    emit_streamed_assistant_text_delta(
+        sess,
+        turn_context,
+        plan_mode_state,
+        item_id,
+        response_id,
+        parsed,
+    )
+    .await;
 }
 
 /// Flush any remaining buffered assistant text parser state at response completion.
@@ -1563,6 +1585,7 @@ async fn flush_assistant_text_segments_all(
     turn_context: &TurnContext,
     mut plan_mode_state: Option<&mut PlanModeStreamState>,
     parsers: &mut AssistantMessageStreamParsers,
+    response_id: &str,
 ) {
     for (item_id, parsed) in parsers.drain_finished() {
         emit_streamed_assistant_text_delta(
@@ -1570,6 +1593,7 @@ async fn flush_assistant_text_segments_all(
             turn_context,
             plan_mode_state.as_deref_mut(),
             &item_id,
+            response_id,
             parsed,
         )
         .await;
@@ -1815,6 +1839,7 @@ async fn try_run_sampling_request(
     let mut active_item_is_streaming_to_client = false;
     let receiving_span = trace_span!("receiving_stream");
     let mut completed_response_id: Option<String> = None;
+    let mut streaming_response_id = format!("sampling-{}", Uuid::new_v4());
     let outcome: CodexResult<SamplingRequestResult> = loop {
         let handle_responses = trace_span!(
             parent: &receiving_span,
@@ -1857,7 +1882,11 @@ async fn try_run_sampling_request(
         record_turn_ttft_metric(&turn_context, &event).await;
 
         match event {
-            ResponseEvent::Created => {}
+            ResponseEvent::Created { response_id } => {
+                if let Some(response_id) = response_id {
+                    streaming_response_id = response_id;
+                }
+            }
             ResponseEvent::OutputItemDone(item) => {
                 if let Some((_, mut consumer)) = active_tool_argument_diff_consumer.take()
                     && let Ok(Some(event)) = consumer.finish()
@@ -1881,6 +1910,7 @@ async fn try_run_sampling_request(
                         plan_mode_state.as_mut(),
                         &mut assistant_message_stream_parsers,
                         &item_id,
+                        &streaming_response_id,
                     )
                     .await;
                 }
@@ -2013,6 +2043,7 @@ async fn try_run_sampling_request(
                                 &turn_context,
                                 Some(state),
                                 item_id,
+                                &streaming_response_id,
                                 parsed,
                             )
                             .await;
@@ -2067,6 +2098,7 @@ async fn try_run_sampling_request(
                     &turn_context,
                     plan_mode_state.as_mut(),
                     &mut assistant_message_stream_parsers,
+                    &streaming_response_id,
                 )
                 .await;
                 sess.record_token_usage_info(&turn_context, token_usage.as_ref())
@@ -2097,6 +2129,7 @@ async fn try_run_sampling_request(
                             &turn_context,
                             plan_mode_state.as_mut(),
                             &item_id,
+                            &streaming_response_id,
                             parsed,
                         )
                         .await;
@@ -2105,6 +2138,7 @@ async fn try_run_sampling_request(
                             thread_id: sess.thread_id.to_string(),
                             turn_id: turn_context.sub_id.clone(),
                             item_id,
+                            response_id: Some(streaming_response_id.clone()),
                             delta,
                         };
                         sess.send_event(&turn_context, EventMsg::AgentMessageContentDelta(event))
@@ -2144,6 +2178,7 @@ async fn try_run_sampling_request(
                         thread_id: sess.thread_id.to_string(),
                         turn_id: turn_context.sub_id.clone(),
                         item_id: active.id(),
+                        response_id: Some(streaming_response_id.clone()),
                         delta,
                         summary_index,
                     };
@@ -2161,6 +2196,7 @@ async fn try_run_sampling_request(
                     let event =
                         EventMsg::AgentReasoningSectionBreak(AgentReasoningSectionBreakEvent {
                             item_id: active.id(),
+                            response_id: Some(streaming_response_id.clone()),
                             summary_index,
                         });
                     sess.send_event(&turn_context, event).await;
@@ -2180,6 +2216,7 @@ async fn try_run_sampling_request(
                         thread_id: sess.thread_id.to_string(),
                         turn_id: turn_context.sub_id.clone(),
                         item_id: active.id(),
+                        response_id: Some(streaming_response_id.clone()),
                         delta,
                         content_index,
                     };
@@ -2197,6 +2234,7 @@ async fn try_run_sampling_request(
         &turn_context,
         plan_mode_state.as_mut(),
         &mut assistant_message_stream_parsers,
+        &streaming_response_id,
     )
     .await;
 

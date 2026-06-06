@@ -1726,6 +1726,9 @@ pub struct AgentMessageContentDeltaEvent {
     pub thread_id: String,
     pub turn_id: String,
     pub item_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub response_id: Option<String>,
     pub delta: String,
 }
 
@@ -1748,6 +1751,9 @@ pub struct ReasoningContentDeltaEvent {
     pub thread_id: String,
     pub turn_id: String,
     pub item_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub response_id: Option<String>,
     pub delta: String,
     // load with default value so it's backward compatible with the old format.
     #[serde(default)]
@@ -1765,6 +1771,9 @@ pub struct ReasoningRawContentDeltaEvent {
     pub thread_id: String,
     pub turn_id: String,
     pub item_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub response_id: Option<String>,
     pub delta: String,
     // load with default value so it's backward compatible with the old format.
     #[serde(default)]
@@ -2219,6 +2228,9 @@ pub struct AgentReasoningSectionBreakEvent {
     // load with default value so it's backward compatible with the old format.
     #[serde(default)]
     pub item_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub response_id: Option<String>,
     #[serde(default)]
     pub summary_index: i64,
 }
