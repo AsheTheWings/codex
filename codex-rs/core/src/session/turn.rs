@@ -961,8 +961,23 @@ pub(crate) fn build_prompt(
     turn_context: &TurnContext,
     base_instructions: BaseInstructions,
 ) -> Prompt {
+    let filtered_input = if turn_context.config.disable_developer_role {
+        input
+            .into_iter()
+            .filter(|item| {
+                if let ResponseItem::Message { role, .. } = item {
+                    role != "developer"
+                } else {
+                    true
+                }
+            })
+            .collect()
+    } else {
+        input
+    };
+
     Prompt {
-        input,
+        input: filtered_input,
         tools: router.model_visible_specs(),
         parallel_tool_calls: turn_context.model_info.supports_parallel_tool_calls,
         base_instructions,

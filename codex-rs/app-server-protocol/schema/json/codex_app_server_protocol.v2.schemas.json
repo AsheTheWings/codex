@@ -3695,6 +3695,12 @@
             "null"
           ]
         },
+        "disable_developer_role": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "forced_chatgpt_workspace_id": {
           "anyOf": [
             {
@@ -3742,6 +3748,12 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "model_based_instruction": {
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "model_context_window": {

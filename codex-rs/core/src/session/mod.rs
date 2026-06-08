@@ -560,11 +560,15 @@ impl Codex {
         config
             .validate_multi_agent_v2_config()
             .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?;
-        let base_instructions = config
-            .base_instructions
-            .clone()
-            .or_else(|| conversation_history.get_base_instructions().map(|s| s.text))
-            .unwrap_or_else(|| model_info.get_model_instructions(config.personality));
+        let base_instructions = if config.model_based_instruction {
+            model_info.get_model_instructions(config.personality)
+        } else {
+            config
+                .base_instructions
+                .clone()
+                .or_else(|| conversation_history.get_base_instructions().map(|s| s.text))
+                .unwrap_or_else(|| model_info.get_model_instructions(config.personality))
+        };
 
         // Dynamic tools are defined at thread start and persisted in rollout session metadata.
         let dynamic_tools = if dynamic_tools.is_empty() {
@@ -2910,25 +2914,27 @@ impl Session {
             multi_agents::usage_hint_text(turn_context, &session_source);
 
         let mut items = Vec::with_capacity(4);
-        if let Some(developer_message) =
-            crate::context_manager::updates::build_developer_update_item(developer_sections)
-        {
-            items.push(developer_message);
-        }
-        for section in separate_developer_sections {
+        if !turn_context.config.disable_developer_role {
             if let Some(developer_message) =
-                crate::context_manager::updates::build_developer_update_item(vec![section])
+                crate::context_manager::updates::build_developer_update_item(developer_sections)
             {
                 items.push(developer_message);
             }
-        }
-        if let Some(usage_hint_text) = multi_agent_v2_usage_hint_text
-            && let Some(usage_hint_message) =
-                crate::context_manager::updates::build_developer_update_item(vec![
-                    usage_hint_text.to_string(),
-                ])
-        {
-            items.push(usage_hint_message);
+            for section in separate_developer_sections {
+                if let Some(developer_message) =
+                    crate::context_manager::updates::build_developer_update_item(vec![section])
+                {
+                    items.push(developer_message);
+                }
+            }
+            if let Some(usage_hint_text) = multi_agent_v2_usage_hint_text
+                && let Some(usage_hint_message) =
+                    crate::context_manager::updates::build_developer_update_item(vec![
+                        usage_hint_text.to_string(),
+                    ])
+            {
+                items.push(usage_hint_message);
+            }
         }
         if let Some(contextual_user_message) =
             crate::context_manager::updates::build_contextual_user_message(contextual_user_sections)
@@ -2937,7 +2943,8 @@ impl Session {
         }
         // Emit the guardian policy prompt as a separate developer item so the guardian
         // subagent sees a distinct, easy-to-audit instruction block.
-        if separate_guardian_developer_message
+        if !turn_context.config.disable_developer_role
+            && separate_guardian_developer_message
             && let Some(developer_instructions) = turn_context.developer_instructions.as_deref()
             && !developer_instructions.is_empty()
             && let Some(guardian_developer_message) =

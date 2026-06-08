@@ -649,6 +649,12 @@ pub struct Config {
     /// Base instructions override.
     pub base_instructions: Option<String>,
 
+    /// Source base instructions from models array and override everything.
+    pub model_based_instruction: bool,
+
+    /// Omit all developer messages role.
+    pub disable_developer_role: bool,
+
     /// Developer instructions override injected as a separate message.
     pub developer_instructions: Option<String>,
 
@@ -2226,6 +2232,8 @@ pub struct ConfigOverrides {
     pub main_execve_wrapper_exe: Option<PathBuf>,
     pub default_zsh_path: Option<AbsolutePathBuf>,
     pub base_instructions: Option<String>,
+    pub model_based_instruction: Option<bool>,
+    pub disable_developer_role: Option<bool>,
     pub developer_instructions: Option<String>,
     pub personality: Option<Personality>,
     pub compact_prompt: Option<String>,
@@ -2598,6 +2606,8 @@ impl Config {
             main_execve_wrapper_exe,
             default_zsh_path,
             base_instructions,
+            model_based_instruction,
+            disable_developer_role,
             developer_instructions,
             personality,
             compact_prompt,
@@ -3222,6 +3232,12 @@ impl Config {
         let base_instructions = base_instructions
             .or(file_base_instructions)
             .or(cfg.instructions.clone());
+        let model_based_instruction = model_based_instruction
+            .or(cfg.model_based_instruction)
+            .unwrap_or(false);
+        let disable_developer_role = disable_developer_role
+            .or(cfg.disable_developer_role)
+            .unwrap_or(false);
         let developer_instructions = developer_instructions.or(cfg.developer_instructions);
         let include_permissions_instructions = cfg.include_permissions_instructions.unwrap_or(true);
         let include_apps_instructions = cfg.include_apps_instructions.unwrap_or(true);
@@ -3432,6 +3448,8 @@ impl Config {
             notify: cfg.notify,
             user_instructions,
             base_instructions,
+            model_based_instruction,
+            disable_developer_role,
             personality,
             developer_instructions,
             compact_prompt,

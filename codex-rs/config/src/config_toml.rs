@@ -203,6 +203,12 @@ pub struct ConfigToml {
     /// System instructions.
     pub instructions: Option<String>,
 
+    /// Source base instructions from models array and override everything.
+    pub model_based_instruction: Option<bool>,
+
+    /// Omit all developer messages role.
+    pub disable_developer_role: Option<bool>,
+
     /// Developer instructions inserted as a `developer` role message.
     #[serde(default)]
     pub developer_instructions: Option<String>,
