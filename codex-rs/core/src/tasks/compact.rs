@@ -30,9 +30,13 @@ impl SessionTask for CompactTask {
     ) -> Option<String> {
         let session = session.clone_session();
         let _ = if crate::compact::should_use_remote_compact_task(ctx.provider.info()) {
-            if ctx
+            let remote_v2_feature = ctx
                 .features
-                .enabled(codex_features::Feature::RemoteCompactionV2)
+                .enabled(codex_features::Feature::RemoteCompactionV2);
+            if ctx
+                .provider
+                .info()
+                .prefers_remote_compaction_v2(remote_v2_feature)
             {
                 emit_compact_metric(
                     &session.services.session_telemetry,

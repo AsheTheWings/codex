@@ -7388,7 +7388,7 @@
               }
             ]
           },
-          "model_based_instruction": {
+          "model_based_instructions": {
             "type": [
               "boolean",
               "null"

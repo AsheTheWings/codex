@@ -1501,6 +1501,15 @@
           "description": "Optional query parameters to append to the base URL.",
           "type": "object"
         },
+        "remote_compaction": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RemoteCompactionMode"
+            }
+          ],
+          "default": "auto",
+          "description": "Explicit remote compaction support for this provider."
+        },
         "request_max_retries": {
           "description": "Maximum number of times to retry a failed HTTP request to this provider.",
           "format": "uint64",
@@ -2506,6 +2515,39 @@
           "description": "Option to disable reasoning summaries.",
           "enum": [
             "none"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "RemoteCompactionMode": {
+      "description": "Provider-level remote compaction capability selection.",
+      "oneOf": [
+        {
+          "description": "Preserve built-in OpenAI/Azure detection.",
+          "enum": [
+            "auto"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Disable remote compaction for this provider.",
+          "enum": [
+            "off"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Force the unary `/responses/compact` endpoint.",
+          "enum": [
+            "v1"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Force the Responses compaction-trigger flow.",
+          "enum": [
+            "v2"
           ],
           "type": "string"
         }
@@ -4935,7 +4977,7 @@
       ],
       "description": "Controls whether the auto-compaction limit applies to the full context or only to tokens after the carried prefix in the current compaction window."
     },
-    "model_based_instruction": {
+    "model_based_instructions": {
       "description": "Source base instructions from models array and override everything.",
       "type": "boolean"
     },

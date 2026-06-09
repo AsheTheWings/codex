@@ -158,6 +158,7 @@ pub(crate) struct CompactConversationRequestSettings {
     pub(crate) effort: Option<ReasoningEffortConfig>,
     pub(crate) summary: ReasoningSummaryConfig,
     pub(crate) service_tier: Option<String>,
+    pub(crate) workspace: Option<String>,
 }
 
 /// Session-scoped state shared by all [`ModelClient`] clones.
@@ -249,6 +250,7 @@ pub struct ModelClientSession {
     /// keep sending it unchanged between turn requests (e.g., for retries, incremental
     /// appends, or continuation requests), and must not send it between different turns.
     turn_state: Arc<OnceLock<String>>,
+    pub(crate) workspace: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -383,6 +385,7 @@ impl ModelClient {
             client: self.clone(),
             websocket_session: self.take_cached_websocket_session(),
             turn_state: Arc::new(OnceLock::new()),
+            workspace: None,
         }
     }
 
@@ -523,6 +526,11 @@ impl ModelClient {
             Some(self.state.session_id.to_string()),
             Some(self.state.thread_id.to_string()),
         ));
+        if let Some(workspace) = settings.workspace.as_deref()
+            && let Ok(header_value) = HeaderValue::from_str(workspace)
+        {
+            extra_headers.insert("workspace", header_value);
+        }
         if let Some(header_value) = self.generate_attestation_header_for().await {
             extra_headers.insert(X_OAI_ATTESTATION_HEADER, header_value);
         }
@@ -927,6 +935,11 @@ impl ModelClient {
             turn_state,
             turn_metadata_header.as_ref(),
         );
+        if let Some(workspace) = self.workspace.as_deref()
+            && let Ok(header_value) = HeaderValue::from_str(workspace)
+        {
+            headers.insert("workspace", header_value);
+        }
         if let Ok(header_value) = HeaderValue::from_str(&thread_id) {
             headers.insert("x-client-request-id", header_value);
         }
@@ -1002,6 +1015,11 @@ impl ModelClientSession {
                     Some(&self.turn_state),
                     turn_metadata_header.as_ref(),
                 );
+                if let Some(workspace) = self.workspace.as_deref()
+                    && let Ok(header_value) = HeaderValue::from_str(workspace)
+                {
+                    headers.insert("workspace", header_value);
+                }
                 headers.extend(self.client.build_responses_identity_headers());
                 if let Some(header_value) = self.client.generate_attestation_header_for().await {
                     headers.insert(X_OAI_ATTESTATION_HEADER, header_value);

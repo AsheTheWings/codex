@@ -542,6 +542,7 @@ impl TestCodexBuilder {
             // Most core tests use SSE-only mock servers, so keep websocket transport off unless
             // a test explicitly opts into websocket coverage.
             supports_websockets: false,
+            remote_compaction: codex_model_provider_info::RemoteCompactionMode::Auto,
             ..built_in_model_providers(/*openai_base_url*/ None)["openai"].clone()
         };
         let cwd = Arc::new(TempDir::new()?);

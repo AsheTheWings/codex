@@ -262,6 +262,11 @@ async fn run_remote_compact_task_inner_impl(
         Some(client_session) => client_session,
         None => {
             owned_client_session = sess.services.model_client.new_session();
+            owned_client_session.workspace = turn_context
+                .config
+                .effective_workspace_roots()
+                .first()
+                .map(|path| path.as_path().display().to_string());
             &mut owned_client_session
         }
     };

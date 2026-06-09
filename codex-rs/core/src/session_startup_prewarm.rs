@@ -265,6 +265,11 @@ async fn schedule_startup_prewarm_inner(
         .turn_metadata_state
         .current_header_value_for_prewarm(&window_id);
     let mut client_session = session.services.model_client.new_session();
+    client_session.workspace = startup_turn_context
+        .config
+        .effective_workspace_roots()
+        .first()
+        .map(|path| path.as_path().display().to_string());
     let websocket_warmup_started_at = Instant::now();
     client_session
         .prewarm_websocket(

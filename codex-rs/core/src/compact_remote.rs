@@ -249,6 +249,11 @@ async fn run_remote_compact_task_inner_impl(
                 } else {
                     turn_context.config.service_tier.clone()
                 },
+                workspace: turn_context
+                    .config
+                    .effective_workspace_roots()
+                    .first()
+                    .map(|path| path.as_path().display().to_string()),
             },
             &turn_context.session_telemetry,
             &compaction_trace,

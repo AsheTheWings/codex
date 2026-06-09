@@ -56,6 +56,21 @@ pub enum WireApi {
     Responses,
 }
 
+/// Provider-level remote compaction capability selection.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum RemoteCompactionMode {
+    /// Preserve built-in OpenAI/Azure detection.
+    #[default]
+    Auto,
+    /// Disable remote compaction for this provider.
+    Off,
+    /// Force the unary `/responses/compact` endpoint.
+    V1,
+    /// Force the Responses compaction-trigger flow.
+    V2,
+}
+
 impl fmt::Display for WireApi {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let value = match self {
@@ -134,6 +149,9 @@ pub struct ModelProviderInfo {
     /// Whether this provider supports the Responses API WebSocket transport.
     #[serde(default)]
     pub supports_websockets: bool,
+    /// Explicit remote compaction support for this provider.
+    #[serde(default)]
+    pub remote_compaction: RemoteCompactionMode,
 }
 
 /// AWS SigV4 auth configuration for a model provider.
@@ -350,6 +368,7 @@ impl ModelProviderInfo {
             websocket_connect_timeout_ms: None,
             requires_openai_auth: true,
             supports_websockets: true,
+            remote_compaction: RemoteCompactionMode::Auto,
         }
     }
 
@@ -380,6 +399,7 @@ impl ModelProviderInfo {
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            remote_compaction: RemoteCompactionMode::Auto,
         }
     }
 
@@ -392,7 +412,20 @@ impl ModelProviderInfo {
     }
 
     pub fn supports_remote_compaction(&self) -> bool {
-        self.is_openai() || is_azure_responses_provider(&self.name, self.base_url.as_deref())
+        !matches!(self.remote_compaction, RemoteCompactionMode::Off)
+            && (matches!(
+                self.remote_compaction,
+                RemoteCompactionMode::V1 | RemoteCompactionMode::V2
+            ) || self.is_openai()
+                || is_azure_responses_provider(&self.name, self.base_url.as_deref()))
+    }
+
+    pub fn prefers_remote_compaction_v2(&self, feature_enabled: bool) -> bool {
+        match self.remote_compaction {
+            RemoteCompactionMode::V1 | RemoteCompactionMode::Off => false,
+            RemoteCompactionMode::V2 => true,
+            RemoteCompactionMode::Auto => feature_enabled,
+        }
     }
 
     pub fn has_command_auth(&self) -> bool {
@@ -511,6 +544,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
+        remote_compaction: RemoteCompactionMode::Auto,
     }
 }
 

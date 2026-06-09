@@ -609,6 +609,7 @@ mod thread_processor_behavior_tests {
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: true,
+            remote_compaction: codex_model_provider_info::RemoteCompactionMode::Auto,
         };
         let config_manager = ConfigManager::new(
             temp_dir.path().to_path_buf(),

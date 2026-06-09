@@ -260,7 +260,7 @@ pub struct Config {
     pub tools: Option<ToolsV2>,
     pub instructions: Option<String>,
     pub developer_instructions: Option<String>,
-    pub model_based_instruction: Option<bool>,
+    pub model_based_instructions: Option<bool>,
     pub disable_developer_role: Option<bool>,
     pub compact_prompt: Option<String>,
     pub model_reasoning_effort: Option<ReasoningEffort>,

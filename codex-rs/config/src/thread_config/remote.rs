@@ -184,6 +184,7 @@ fn model_provider_from_proto(
         websocket_connect_timeout_ms: provider.websocket_connect_timeout_ms,
         requires_openai_auth: provider.requires_openai_auth,
         supports_websockets: provider.supports_websockets,
+        remote_compaction: codex_model_provider_info::RemoteCompactionMode::Auto,
     };
     Ok((id, info))
 }
@@ -448,6 +449,8 @@ mod tests {
                             websocket_connect_timeout_ms: Some(10_000),
                             requires_openai_auth: false,
                             supports_websockets: true,
+                            remote_compaction:
+                                codex_model_provider_info::RemoteCompactionMode::Auto,
                         }],
                         features: HashMap::from([
                             ("plugins".to_string(), false),
@@ -511,6 +514,7 @@ mod tests {
             websocket_connect_timeout_ms: Some(10_000),
             requires_openai_auth: false,
             supports_websockets: true,
+            remote_compaction: codex_model_provider_info::RemoteCompactionMode::Auto,
             aws: None,
         }
     }

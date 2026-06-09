@@ -143,6 +143,11 @@ pub(crate) async fn run_turn(
 ) -> Option<String> {
     let mut client_session =
         prewarmed_client_session.unwrap_or_else(|| sess.services.model_client.new_session());
+    client_session.workspace = turn_context
+        .config
+        .effective_workspace_roots()
+        .first()
+        .map(|path| path.as_path().display().to_string());
     // TODO(ccunningham): Pre-turn compaction runs before context updates and the
     // new user message are recorded. Estimate pending incoming items (context
     // diffs/full reinjection + user input) and trigger compaction preemptively
@@ -856,7 +861,12 @@ async fn run_auto_compact(
     phase: CompactionPhase,
 ) -> CodexResult<()> {
     if should_use_remote_compact_task(turn_context.provider.info()) {
-        if turn_context.features.enabled(Feature::RemoteCompactionV2) {
+        let remote_v2_feature = turn_context.features.enabled(Feature::RemoteCompactionV2);
+        if turn_context
+            .provider
+            .info()
+            .prefers_remote_compaction_v2(remote_v2_feature)
+        {
             emit_compact_metric(
                 &sess.services.session_telemetry,
                 "remote_v2",

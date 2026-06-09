@@ -189,6 +189,10 @@ impl MemoryStartupContext {
         );
 
         let mut client_session = model_client.new_session();
+        client_session.workspace = config
+            .effective_workspace_roots()
+            .first()
+            .map(|path| path.as_path().display().to_string());
         let mut stream = client_session
             .stream(
                 prompt,

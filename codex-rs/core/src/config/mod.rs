@@ -650,7 +650,7 @@ pub struct Config {
     pub base_instructions: Option<String>,
 
     /// Source base instructions from models array and override everything.
-    pub model_based_instruction: bool,
+    pub model_based_instructions: bool,
 
     /// Omit all developer messages role.
     pub disable_developer_role: bool,
@@ -2232,7 +2232,7 @@ pub struct ConfigOverrides {
     pub main_execve_wrapper_exe: Option<PathBuf>,
     pub default_zsh_path: Option<AbsolutePathBuf>,
     pub base_instructions: Option<String>,
-    pub model_based_instruction: Option<bool>,
+    pub model_based_instructions: Option<bool>,
     pub disable_developer_role: Option<bool>,
     pub developer_instructions: Option<String>,
     pub personality: Option<Personality>,
@@ -2606,7 +2606,7 @@ impl Config {
             main_execve_wrapper_exe,
             default_zsh_path,
             base_instructions,
-            model_based_instruction,
+            model_based_instructions,
             disable_developer_role,
             developer_instructions,
             personality,
@@ -3232,8 +3232,8 @@ impl Config {
         let base_instructions = base_instructions
             .or(file_base_instructions)
             .or(cfg.instructions.clone());
-        let model_based_instruction = model_based_instruction
-            .or(cfg.model_based_instruction)
+        let model_based_instructions = model_based_instructions
+            .or(cfg.model_based_instructions)
             .unwrap_or(false);
         let disable_developer_role = disable_developer_role
             .or(cfg.disable_developer_role)
@@ -3448,7 +3448,7 @@ impl Config {
             notify: cfg.notify,
             user_instructions,
             base_instructions,
-            model_based_instruction,
+            model_based_instructions,
             disable_developer_role,
             personality,
             developer_instructions,

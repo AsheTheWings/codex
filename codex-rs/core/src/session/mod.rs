@@ -560,7 +560,7 @@ impl Codex {
         config
             .validate_multi_agent_v2_config()
             .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?;
-        let base_instructions = if config.model_based_instruction {
+        let base_instructions = if config.model_based_instructions {
             model_info.get_model_instructions(config.personality)
         } else {
             config
