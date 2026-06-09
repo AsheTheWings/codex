@@ -250,7 +250,7 @@ pub struct ModelClientSession {
     /// keep sending it unchanged between turn requests (e.g., for retries, incremental
     /// appends, or continuation requests), and must not send it between different turns.
     turn_state: Arc<OnceLock<String>>,
-    pub(crate) workspace: Option<String>,
+    pub workspace: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -840,11 +840,12 @@ impl ModelClient {
         api_auth: SharedAuthProvider,
         turn_state: Option<Arc<OnceLock<String>>>,
         turn_metadata_header: Option<&str>,
+        workspace: Option<&str>,
         auth_context: AuthRequestTelemetryContext,
         request_route_telemetry: RequestRouteTelemetry,
     ) -> std::result::Result<ApiWebSocketConnection, ApiError> {
         let headers = self
-            .build_websocket_headers(turn_state.as_ref(), turn_metadata_header)
+            .build_websocket_headers(turn_state.as_ref(), turn_metadata_header, workspace)
             .await;
         let websocket_telemetry = ModelClientSession::build_websocket_telemetry(
             session_telemetry,
@@ -926,6 +927,7 @@ impl ModelClient {
         &self,
         turn_state: Option<&Arc<OnceLock<String>>>,
         turn_metadata_header: Option<&str>,
+        workspace: Option<&str>,
     ) -> ApiHeaderMap {
         let turn_metadata_header = parse_turn_metadata_header(turn_metadata_header);
         let session_id = self.state.session_id.to_string();
@@ -935,7 +937,7 @@ impl ModelClient {
             turn_state,
             turn_metadata_header.as_ref(),
         );
-        if let Some(workspace) = self.workspace.as_deref()
+        if let Some(workspace) = workspace
             && let Ok(header_value) = HeaderValue::from_str(workspace)
         {
             headers.insert("workspace", header_value);
@@ -1146,6 +1148,7 @@ impl ModelClientSession {
                 client_setup.api_auth,
                 Some(Arc::clone(&self.turn_state)),
                 /*turn_metadata_header*/ None,
+                self.workspace.as_deref(),
                 auth_context,
                 RequestRouteTelemetry::for_endpoint(RESPONSES_ENDPOINT),
             )
@@ -1202,6 +1205,7 @@ impl ModelClientSession {
                     api_auth,
                     Some(turn_state),
                     turn_metadata_header,
+                    self.workspace.as_deref(),
                     auth_context,
                     request_route_telemetry,
                 )

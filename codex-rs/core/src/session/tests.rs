@@ -2543,6 +2543,7 @@ async fn record_initial_history_forked_hydrates_previous_turn_settings() {
     let previous_model = "forked-rollout-model";
     let previous_context_item = TurnContextItem {
         turn_id: Some(turn_context.sub_id.clone()),
+        client_user_message_id: None,
         #[allow(deprecated)]
         cwd: turn_context.cwd.to_path_buf(),
         workspace_roots: None,
@@ -2944,6 +2945,7 @@ async fn thread_rollback_restores_cleared_reference_context_item_after_compactio
         })),
         RolloutItem::TurnContext(TurnContextItem {
             turn_id: Some(rolled_back_turn_id.clone()),
+            client_user_message_id: None,
             model: "rolled-back-model".to_string(),
             ..first_context_item.clone()
         }),

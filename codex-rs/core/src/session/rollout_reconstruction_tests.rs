@@ -59,6 +59,7 @@ async fn record_initial_history_resumed_bare_turn_context_does_not_hydrate_previ
     let previous_model = "previous-rollout-model";
     let previous_context_item = TurnContextItem {
         turn_id: Some(turn_context.sub_id.clone()),
+        client_user_message_id: None,
         #[allow(deprecated)]
         cwd: turn_context.cwd.to_path_buf(),
         workspace_roots: None,
@@ -98,6 +99,7 @@ async fn record_initial_history_resumed_hydrates_previous_turn_settings_from_lif
     let previous_model = "previous-rollout-model";
     let mut previous_context_item = TurnContextItem {
         turn_id: Some(turn_context.sub_id.clone()),
+        client_user_message_id: None,
         #[allow(deprecated)]
         cwd: turn_context.cwd.to_path_buf(),
         workspace_roots: None,
@@ -511,6 +513,7 @@ async fn reconstruct_history_rollback_counts_inter_agent_assistant_turns() {
     let assistant_turn_id = "assistant-instruction-turn".to_string();
     let assistant_turn_context = TurnContextItem {
         turn_id: Some(assistant_turn_id.clone()),
+        client_user_message_id: None,
         ..first_context_item.clone()
     };
     let assistant_instruction = inter_agent_assistant_message("continue");
@@ -948,6 +951,7 @@ async fn record_initial_history_resumed_turn_context_after_compaction_reestablis
     let previous_model = "previous-rollout-model";
     let previous_context_item = TurnContextItem {
         turn_id: Some(turn_context.sub_id.clone()),
+        client_user_message_id: None,
         #[allow(deprecated)]
         cwd: turn_context.cwd.to_path_buf(),
         workspace_roots: None,
@@ -1027,6 +1031,7 @@ async fn record_initial_history_resumed_turn_context_after_compaction_reestablis
             .expect("serialize seeded reference context item"),
         serde_json::to_value(Some(TurnContextItem {
             turn_id: Some(turn_context.sub_id.clone()),
+            client_user_message_id: None,
             #[allow(deprecated)]
             cwd: turn_context.cwd.to_path_buf(),
             workspace_roots: None,
@@ -1056,6 +1061,7 @@ async fn record_initial_history_resumed_aborted_turn_without_id_clears_active_tu
     let previous_model = "previous-rollout-model";
     let previous_context_item = TurnContextItem {
         turn_id: Some(turn_context.sub_id.clone()),
+        client_user_message_id: None,
         #[allow(deprecated)]
         cwd: turn_context.cwd.to_path_buf(),
         workspace_roots: None,
@@ -1175,6 +1181,7 @@ async fn record_initial_history_resumed_unmatched_abort_preserves_active_turn_fo
     let unmatched_abort_turn_id = "other-turn".to_string();
     let current_context_item = TurnContextItem {
         turn_id: Some(current_turn_id.clone()),
+        client_user_message_id: None,
         #[allow(deprecated)]
         cwd: turn_context.cwd.to_path_buf(),
         workspace_roots: None,
@@ -1293,6 +1300,7 @@ async fn record_initial_history_resumed_trailing_incomplete_turn_compaction_clea
     let previous_model = "previous-rollout-model";
     let previous_context_item = TurnContextItem {
         turn_id: Some(turn_context.sub_id.clone()),
+        client_user_message_id: None,
         #[allow(deprecated)]
         cwd: turn_context.cwd.to_path_buf(),
         workspace_roots: None,
@@ -1452,6 +1460,7 @@ async fn record_initial_history_resumed_replaced_incomplete_compacted_turn_clear
     let previous_model = "previous-rollout-model";
     let previous_context_item = TurnContextItem {
         turn_id: Some(turn_context.sub_id.clone()),
+        client_user_message_id: None,
         #[allow(deprecated)]
         cwd: turn_context.cwd.to_path_buf(),
         workspace_roots: None,

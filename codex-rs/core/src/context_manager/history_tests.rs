@@ -120,6 +120,7 @@ fn developer_msg_with_fragments(texts: &[&str]) -> ResponseItem {
 fn reference_context_item() -> TurnContextItem {
     TurnContextItem {
         turn_id: Some("reference-turn".to_string()),
+        client_user_message_id: None,
         cwd: PathBuf::from("/tmp/reference-cwd"),
         workspace_roots: None,
         current_date: Some("2026-03-23".to_string()),
