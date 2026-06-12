@@ -681,7 +681,7 @@ async fn lookup_session_target_by_name_with_app_server(
                 limit: Some(100),
                 sort_key: Some(AppServerThreadSortKey::UpdatedAt),
                 sort_direction: None,
-                model_providers: None,
+                model_providers: Some(Vec::new()),
                 source_kinds: Some(vec![ThreadSourceKind::Cli, ThreadSourceKind::VsCode]),
                 archived: Some(false),
                 cwd: None,
@@ -759,8 +759,8 @@ async fn lookup_latest_session_target_with_app_server(
 }
 
 fn latest_session_lookup_params(
-    uses_remote_workspace: bool,
-    config: &Config,
+    _uses_remote_workspace: bool,
+    _config: &Config,
     cwd_filter: Option<&Path>,
     include_non_interactive: bool,
 ) -> ThreadListParams {
@@ -769,11 +769,7 @@ fn latest_session_lookup_params(
         limit: Some(1),
         sort_key: Some(AppServerThreadSortKey::UpdatedAt),
         sort_direction: None,
-        model_providers: if uses_remote_workspace {
-            None
-        } else {
-            Some(vec![config.model_provider_id.clone()])
-        },
+        model_providers: Some(Vec::new()),
         source_kinds: Some(resume_source_kinds(include_non_interactive)),
         archived: Some(false),
         cwd: cwd_filter.map(|cwd| ThreadListCwdFilter::One(cwd.to_string_lossy().to_string())),
@@ -2317,7 +2313,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn latest_session_lookup_params_keep_local_filters_for_embedded_sessions()
+    async fn latest_session_lookup_params_request_all_providers_for_embedded_sessions()
     -> std::io::Result<()> {
         let temp_dir = TempDir::new()?;
         let config = build_config(&temp_dir).await?;
@@ -2330,7 +2326,7 @@ mod tests {
             /*include_non_interactive*/ false,
         );
 
-        assert_eq!(params.model_providers, Some(vec![config.model_provider_id]));
+        assert_eq!(params.model_providers, Some(Vec::new()));
         assert_eq!(
             params.cwd,
             Some(ThreadListCwdFilter::One(cwd.to_string_lossy().to_string()))
@@ -2339,7 +2335,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn latest_session_lookup_params_keep_local_filters_for_local_daemon_sessions()
+    async fn latest_session_lookup_params_request_all_providers_for_local_daemon_sessions()
     -> color_eyre::Result<()> {
         let temp_dir = TempDir::new()?;
         let config = build_config(&temp_dir).await?;
@@ -2357,7 +2353,7 @@ mod tests {
             /*include_non_interactive*/ false,
         );
 
-        assert_eq!(params.model_providers, Some(vec![config.model_provider_id]));
+        assert_eq!(params.model_providers, Some(Vec::new()));
         assert_eq!(
             params.cwd,
             Some(ThreadListCwdFilter::One(cwd.to_string_lossy().to_string()))
@@ -2366,7 +2362,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn latest_session_lookup_params_omit_local_filters_for_remote_sessions()
+    async fn latest_session_lookup_params_request_all_providers_for_remote_sessions()
     -> std::io::Result<()> {
         let temp_dir = TempDir::new()?;
         let config = build_config(&temp_dir).await?;
@@ -2376,7 +2372,7 @@ mod tests {
             /*include_non_interactive*/ false,
         );
 
-        assert_eq!(params.model_providers, None);
+        assert_eq!(params.model_providers, Some(Vec::new()));
         assert_eq!(params.cwd, None);
         Ok(())
     }
@@ -2418,7 +2414,7 @@ mod tests {
             /*include_non_interactive*/ false,
         );
 
-        assert_eq!(params.model_providers, None);
+        assert_eq!(params.model_providers, Some(Vec::new()));
         assert_eq!(
             params.cwd,
             Some(ThreadListCwdFilter::One(String::from("repo/on/server")))

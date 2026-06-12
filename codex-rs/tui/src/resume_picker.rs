@@ -158,7 +158,7 @@ enum PickerLoadRequest {
 #[derive(Clone)]
 enum ProviderFilter {
     Any,
-    MatchDefault(String),
+    MatchDefault,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -521,11 +521,11 @@ fn local_picker_cwd_filter(
     }
 }
 
-fn picker_provider_filter(config: &Config, uses_remote_workspace: bool) -> ProviderFilter {
+fn picker_provider_filter(_config: &Config, uses_remote_workspace: bool) -> ProviderFilter {
     if uses_remote_workspace {
         ProviderFilter::Any
     } else {
-        ProviderFilter::MatchDefault(config.model_provider_id.to_string())
+        ProviderFilter::MatchDefault
     }
 }
 
@@ -1807,7 +1807,7 @@ fn row_from_app_server_thread(thread: Thread) -> Option<Row> {
 fn thread_list_params(
     cursor: Option<String>,
     cwd_filter: Option<&Path>,
-    provider_filter: ProviderFilter,
+    _provider_filter: ProviderFilter,
     sort_key: ThreadSortKey,
     include_non_interactive: bool,
 ) -> ThreadListParams {
@@ -1816,10 +1816,7 @@ fn thread_list_params(
         limit: Some(PAGE_SIZE as u32),
         sort_key: Some(sort_key),
         sort_direction: None,
-        model_providers: match provider_filter {
-            ProviderFilter::Any => None,
-            ProviderFilter::MatchDefault(default_provider) => Some(vec![default_provider]),
-        },
+        model_providers: Some(Vec::new()),
         source_kinds: Some(crate::resume_source_kinds(include_non_interactive)),
         archived: Some(false),
         cwd: cwd_filter.map(|cwd| ThreadListCwdFilter::One(cwd.to_string_lossy().into_owned())),
@@ -3309,7 +3306,7 @@ mod tests {
         let params = thread_list_params(
             Some(String::from("cursor-1")),
             cwd_filter.as_deref(),
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             ThreadSortKey::UpdatedAt,
             /*include_non_interactive*/ false,
         );
@@ -3378,7 +3375,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3530,7 +3527,7 @@ mod tests {
     }
 
     #[test]
-    fn remote_thread_list_params_omit_provider_filter() {
+    fn remote_thread_list_params_request_all_providers() {
         let params = thread_list_params(
             Some(String::from("cursor-1")),
             Some(Path::new("repo/on/server")),
@@ -3540,7 +3537,7 @@ mod tests {
         );
 
         assert_eq!(params.cursor, Some(String::from("cursor-1")));
-        assert_eq!(params.model_providers, None);
+        assert_eq!(params.model_providers, Some(Vec::new()));
         assert_eq!(
             params.source_kinds,
             Some(vec![ThreadSourceKind::Cli, ThreadSourceKind::VsCode])
@@ -3548,6 +3545,24 @@ mod tests {
         assert_eq!(
             params.cwd,
             Some(ThreadListCwdFilter::One(String::from("repo/on/server")))
+        );
+    }
+
+    #[test]
+    fn local_thread_list_params_request_all_providers() {
+        let params = thread_list_params(
+            Some(String::from("cursor-1")),
+            Some(Path::new("/repo")),
+            ProviderFilter::MatchDefault,
+            ThreadSortKey::UpdatedAt,
+            /*include_non_interactive*/ false,
+        );
+
+        assert_eq!(params.cursor, Some(String::from("cursor-1")));
+        assert_eq!(params.model_providers, Some(Vec::new()));
+        assert_eq!(
+            params.cwd,
+            Some(ThreadListCwdFilter::One(String::from("/repo")))
         );
     }
 
@@ -3562,7 +3577,7 @@ mod tests {
         );
 
         assert_eq!(params.cursor, Some(String::from("cursor-1")));
-        assert_eq!(params.model_providers, None);
+        assert_eq!(params.model_providers, Some(Vec::new()));
         let source_kinds = crate::resume_source_kinds(/*include_non_interactive*/ true);
         assert_eq!(params.source_kinds, Some(source_kinds));
     }
@@ -3642,7 +3657,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3714,7 +3729,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3746,7 +3761,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3765,7 +3780,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3791,7 +3806,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3812,7 +3827,7 @@ mod tests {
         let state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3835,7 +3850,7 @@ mod tests {
         let state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3853,7 +3868,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3873,7 +3888,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3904,7 +3919,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3924,7 +3939,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3952,7 +3967,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -3980,7 +3995,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4008,7 +4023,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4042,7 +4057,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4064,7 +4079,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4093,7 +4108,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4130,7 +4145,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4183,7 +4198,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4207,7 +4222,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4275,7 +4290,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4305,7 +4320,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4341,7 +4356,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4381,7 +4396,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4425,7 +4440,7 @@ mod tests {
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4459,7 +4474,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4490,7 +4505,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4512,7 +4527,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4545,7 +4560,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4584,7 +4599,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4617,7 +4632,7 @@ session_picker_view = "dense"
         let state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ false,
             Some(PathBuf::from("/tmp/project")),
             SessionPickerAction::Resume,
@@ -4647,7 +4662,7 @@ session_picker_view = "dense"
         let state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ false,
             Some(PathBuf::from("/tmp/project")),
             SessionPickerAction::Resume,
@@ -4692,7 +4707,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             show_all,
             filter_cwd,
             SessionPickerAction::Resume,
@@ -4781,7 +4796,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4839,7 +4854,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -4880,7 +4895,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ false,
             Some(PathBuf::from(
                 "/Users/felipe.coury/code/codex.fcoury-session-picker/codex-rs",
@@ -4932,7 +4947,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5001,7 +5016,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5039,7 +5054,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5091,7 +5106,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5145,7 +5160,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5205,7 +5220,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5239,7 +5254,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5274,7 +5289,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5316,7 +5331,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5354,7 +5369,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ false,
             Some(PathBuf::from("/tmp/project")),
             SessionPickerAction::Resume,
@@ -5388,7 +5403,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             Some(PathBuf::from("/tmp/project")),
             SessionPickerAction::Resume,
@@ -5453,7 +5468,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5512,7 +5527,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5574,7 +5589,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5599,7 +5614,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5643,7 +5658,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5682,7 +5697,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5933,7 +5948,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -5975,7 +5990,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -6017,7 +6032,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -6055,7 +6070,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -6096,7 +6111,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -6212,7 +6227,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -6230,7 +6245,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -6253,7 +6268,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -6285,7 +6300,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
@@ -6305,7 +6320,7 @@ session_picker_view = "dense"
         let mut state = PickerState::new(
             FrameRequester::test_dummy(),
             loader,
-            ProviderFilter::MatchDefault(String::from("openai")),
+            ProviderFilter::MatchDefault,
             /*show_all*/ true,
             /*filter_cwd*/ None,
             SessionPickerAction::Resume,
