@@ -684,6 +684,12 @@ pub enum Op {
     /// responsible for undoing any edits on disk.
     ThreadRollback { num_turns: u32 },
 
+    /// Atomically revert paginated history and reconstruct this live session in place.
+    ThreadRevert {
+        before_turn_id: String,
+        reply: oneshot::Sender<CodexResult<PathBuf>>,
+    },
+
     /// Request a code review from the agent.
     Review { review_request: ReviewRequest },
 
@@ -895,6 +901,7 @@ impl Op {
             Self::Compact => "compact",
             Self::SetThreadMemoryMode { .. } => "set_thread_memory_mode",
             Self::ThreadRollback { .. } => "thread_rollback",
+            Self::ThreadRevert { .. } => "thread_revert",
             Self::Review { .. } => "review",
             Self::ApproveGuardianDeniedAction { .. } => "approve_guardian_denied_action",
             Self::Shutdown => "shutdown",

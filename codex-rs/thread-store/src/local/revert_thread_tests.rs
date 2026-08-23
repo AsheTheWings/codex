@@ -17,6 +17,8 @@ use crate::ArchiveThreadParams;
 use crate::CreateThreadParams;
 use crate::DeleteThreadParams;
 use crate::ListTurnsParams;
+use crate::PersistContext;
+use crate::RevertLiveThreadParams;
 use crate::RevertThreadParams;
 use crate::SortDirection;
 use crate::StoredTurnItemsView;
@@ -134,6 +136,83 @@ async fn revert_keeps_thread_id_and_hides_suffix_across_repeated_reverts() {
     }
 }
 
+#[tokio::test]
+async fn live_revert_swaps_writer_and_accepts_later_appends() {
+    let home = TempDir::new().expect("temp dir");
+    let config = test_config(home.path());
+    let state_db = codex_state::StateRuntime::init(
+        config.sqlite.clone(),
+        config.default_model_provider_id.clone(),
+    )
+    .await
+    .expect("initialize state database");
+    let store = LocalThreadStore::new(config, Some(state_db.clone()));
+    let thread_id = ThreadId::new();
+    create_paginated_thread(&store, thread_id).await;
+    store
+        .persist_thread(thread_id, PersistContext::Standard)
+        .await
+        .expect("persist source thread");
+    store
+        .append_items(AppendThreadItemsParams {
+            thread_id,
+            items: vec![
+                turn_started("turn-1"),
+                turn_completed("turn-1"),
+                turn_started("turn-2"),
+                turn_completed("turn-2"),
+            ],
+        })
+        .await
+        .expect("append turns");
+    let original_path = store
+        .live_rollout_path(thread_id)
+        .await
+        .expect("source rollout path");
+    codex_rollout::state_db::reconcile_rollout(
+        Some(state_db.as_ref()),
+        original_path.as_path(),
+        "test-provider",
+        /*builder*/ None,
+        &[],
+        /*archived_only*/ Some(false),
+        /*new_thread_memory_mode*/ None,
+    )
+    .await;
+
+    let reverted = store
+        .revert_live_thread(RevertLiveThreadParams {
+            thread_id,
+            before_turn_id: "turn-2".to_string(),
+            metadata: persistence_metadata(),
+        })
+        .await
+        .expect("revert live thread");
+    let replacement_path = reverted.rollout_path;
+    assert_ne!(replacement_path, original_path);
+    assert_eq!(
+        store
+            .live_rollout_path(thread_id)
+            .await
+            .expect("replacement rollout path"),
+        replacement_path
+    );
+    assert_eq!(turn_ids(&store, thread_id).await, vec!["turn-1"]);
+
+    store
+        .append_items(AppendThreadItemsParams {
+            thread_id,
+            items: vec![turn_started("turn-3"), turn_completed("turn-3")],
+        })
+        .await
+        .expect("append after live revert");
+    assert_eq!(turn_ids(&store, thread_id).await, vec!["turn-1", "turn-3"]);
+    store
+        .shutdown_thread(thread_id)
+        .await
+        .expect("close replacement writer");
+}
+
 async fn rollout_paths_for_thread(
     home: &std::path::Path,
     thread_id: ThreadId,
@@ -165,14 +244,18 @@ async fn create_paginated_thread(store: &LocalThreadStore, thread_id: ThreadId) 
             history_base: None,
             subagent_history_start_ordinal: None,
             initial_window_id: "window-1".to_string(),
-            metadata: ThreadPersistenceMetadata {
-                cwd: Some(std::env::current_dir().expect("cwd")),
-                model_provider: "test-provider".to_string(),
-                memory_mode: ThreadMemoryMode::Enabled,
-            },
+            metadata: persistence_metadata(),
         })
         .await
         .expect("create paginated thread");
+}
+
+fn persistence_metadata() -> ThreadPersistenceMetadata {
+    ThreadPersistenceMetadata {
+        cwd: Some(std::env::current_dir().expect("cwd")),
+        model_provider: "test-provider".to_string(),
+        memory_mode: ThreadMemoryMode::Enabled,
+    }
 }
 
 async fn turn_ids(store: &LocalThreadStore, thread_id: ThreadId) -> Vec<String> {

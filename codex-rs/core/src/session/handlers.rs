@@ -45,6 +45,8 @@ use codex_protocol::protocol::WarningEvent;
 use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_thread_store::PersistContext;
+use codex_thread_store::ThreadPersistenceMetadata;
+use codex_thread_store::ThreadStoreError;
 
 use crate::context_manager::is_user_turn_boundary;
 use codex_protocol::dynamic_tools::DynamicToolResponse;
@@ -362,6 +364,63 @@ pub async fn thread_rollback(sess: &Arc<Session>, sub_id: String, num_turns: u32
     .await;
 }
 
+pub async fn thread_revert(
+    sess: &Arc<Session>,
+    before_turn_id: String,
+) -> codex_protocol::error::Result<std::path::PathBuf> {
+    // Revert replaces the active history, so pending work must not start another turn between the
+    // interruption and reconstruction.
+    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+    let turn_context = sess.new_default_turn().await;
+    let live_thread = sess
+        .live_thread_for_persistence("revert thread")
+        .map_err(|err| codex_protocol::error::CodexErr::Fatal(err.to_string()))?;
+    let config = sess.get_config().await;
+    let metadata = ThreadPersistenceMetadata {
+        cwd: Some(config.cwd.to_path_buf()),
+        model_provider: config.model_provider_id.clone(),
+        memory_mode: if config.memories.generate_memories {
+            ThreadMemoryMode::Enabled
+        } else {
+            ThreadMemoryMode::Disabled
+        },
+    };
+    let (rollout_path, model_context) = live_thread
+        .revert(before_turn_id, metadata)
+        .await
+        .map_err(|err| match err {
+            ThreadStoreError::ThreadNotFound { thread_id } => {
+                codex_protocol::error::CodexErr::ThreadNotFound(thread_id)
+            }
+            ThreadStoreError::InvalidRequest { message }
+            | ThreadStoreError::Conflict { message } => {
+                codex_protocol::error::CodexErr::InvalidRequest(message)
+            }
+            ThreadStoreError::Unsupported { operation } => {
+                codex_protocol::error::CodexErr::UnsupportedOperation(operation.to_string())
+            }
+            err => codex_protocol::error::CodexErr::Fatal(err.to_string()),
+        })?;
+    sess.apply_rollout_reconstruction(turn_context.as_ref(), model_context.items.as_slice())
+        .await;
+    if sess
+        .services
+        .thread_extension_data
+        .remove::<NodeReplReviewEvidence>()
+        .is_some()
+    {
+        sess.guardian_review_session
+            .invalidate_for_node_repl_evidence()
+            .await;
+    }
+    sess.services
+        .agent_control
+        .rollout_budget()
+        .rearm_reminder(sess.thread_id());
+    sess.recompute_token_usage(turn_context.as_ref()).await;
+    Ok(rollout_path)
+}
+
 pub(super) async fn persist_thread_memory_mode_update(
     sess: &Arc<Session>,
     mode: ThreadMemoryMode,
@@ -651,6 +710,14 @@ pub(super) async fn submission_loop(
                 }
                 Op::ThreadRollback { num_turns } => {
                     thread_rollback(&sess, sub.id.clone(), num_turns).await;
+                    false
+                }
+                Op::ThreadRevert {
+                    before_turn_id,
+                    reply,
+                } => {
+                    let result = thread_revert(&sess, before_turn_id).await;
+                    let _ = reply.send(result);
                     false
                 }
                 Op::SetThreadMemoryMode { mode } => {
