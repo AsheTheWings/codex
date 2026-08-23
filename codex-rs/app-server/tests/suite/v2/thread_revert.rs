@@ -35,6 +35,7 @@ use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
 use codex_protocol::openai_models::ReasoningEffort;
 use pretty_assertions::assert_eq;
+use std::sync::atomic::Ordering;
 use tempfile::TempDir;
 use tokio::time::timeout;
 
@@ -220,13 +221,19 @@ async fn thread_revert_replaces_paginated_history_before_turn() -> Result<()> {
 #[tokio::test]
 async fn thread_revert_interrupts_active_turn_and_keeps_thread_loaded() -> Result<()> {
     let home = TempDir::new()?;
+    let (mcp_server_url, mcp_server_handle, mcp_session_starts) =
+        super::mcp_tool::start_counted_mcp_server().await?;
     let server = create_mock_responses_server_sequence(vec![
         create_final_assistant_message_sse_response("first")?,
         create_request_user_input_sse_response("call_blocked")?,
         create_final_assistant_message_sse_response("third")?,
     ])
     .await;
-    MockResponsesConfig::new(&server.uri()).write(home.path())?;
+    MockResponsesConfig::new(&server.uri())
+        .with_extra_config(&format!(
+            "[mcp_servers.revert_probe]\nurl = \"{mcp_server_url}/mcp\""
+        ))
+        .write(home.path())?;
     let mut mcp = TestAppServer::builder()
         .with_codex_home(home.path())
         .build()
@@ -239,6 +246,17 @@ async fn thread_revert_interrupts_active_turn_and_keeps_thread_loaded() -> Resul
             ..Default::default()
         })
         .await?;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_matching_notification("revert probe MCP ready", |notification| {
+            notification.method == "mcpServer/startupStatus/updated"
+                && notification.params.as_ref().is_some_and(|params| {
+                    params["name"] == "revert_probe" && params["status"] == "ready"
+                })
+        }),
+    )
+    .await??;
+    assert_eq!(mcp_session_starts.load(Ordering::SeqCst), 1);
     let first_turn = mcp
         .start_turn_and_wait_for_completion(TurnStartParams {
             thread_id: thread.id.clone(),
@@ -298,6 +316,8 @@ async fn thread_revert_interrupts_active_turn_and_keeps_thread_loaded() -> Resul
     .await??;
     assert_eq!(completed.thread_id, thread.id);
     assert_eq!(completed.turn.status, TurnStatus::Interrupted);
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert_eq!(mcp_session_starts.load(Ordering::SeqCst), 1);
     assert!(reverted_thread.turns.is_empty());
     assert!(items_backwards_cursor.is_some());
     assert_eq!(
@@ -331,6 +351,8 @@ async fn thread_revert_interrupts_active_turn_and_keeps_thread_loaded() -> Resul
         ..Default::default()
     })
     .await?;
+    mcp_server_handle.abort();
+    let _ = mcp_server_handle.await;
     Ok(())
 }
 

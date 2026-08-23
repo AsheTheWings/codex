@@ -31,7 +31,9 @@ use crate::ReadThreadByRolloutPathParams;
 use crate::ReadThreadParams;
 use crate::RenameThreadSectionParams;
 use crate::ResumeThreadParams;
+use crate::RevertLiveThreadParams;
 use crate::RevertThreadParams;
+use crate::RevertedLiveThread;
 use crate::SearchThreadOccurrencesParams;
 use crate::SearchThreadsParams;
 use crate::StoredModelContext;
@@ -180,6 +182,21 @@ pub trait ThreadStore: Any + Send + Sync {
         Box::pin(async {
             Err(ThreadStoreError::Unsupported {
                 operation: "revert_thread",
+            })
+        })
+    }
+
+    /// Atomically reverts a paginated thread and replaces its live writer.
+    ///
+    /// Implementations must leave the old writer usable when cutover fails. After a successful
+    /// return, future appends must target the returned rollout path.
+    fn revert_live_thread(
+        &self,
+        _params: RevertLiveThreadParams,
+    ) -> ThreadStoreFuture<'_, RevertedLiveThread> {
+        Box::pin(async {
+            Err(ThreadStoreError::Unsupported {
+                operation: "revert_live_thread",
             })
         })
     }

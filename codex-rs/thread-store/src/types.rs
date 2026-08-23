@@ -207,6 +207,26 @@ pub struct RevertThreadParams {
     pub before_turn_id: String,
 }
 
+/// Parameters for reverting a paginated thread while keeping its writer live.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RevertLiveThreadParams {
+    /// Stable logical thread to revert.
+    pub thread_id: ThreadId,
+    /// First turn excluded from the retained history.
+    pub before_turn_id: String,
+    /// Metadata for future writes appended after the revert.
+    pub metadata: ThreadPersistenceMetadata,
+}
+
+/// Result of atomically replacing a paginated thread's live rollout.
+#[derive(Clone, Debug)]
+pub struct RevertedLiveThread {
+    /// New canonical rollout path used for future appends.
+    pub rollout_path: PathBuf,
+    /// Bounded model context for reconstructing the live Core session.
+    pub model_context: StoredModelContext,
+}
+
 /// Frozen source history and model context for a reference-backed fork.
 #[derive(Debug)]
 pub struct PreparedFork {

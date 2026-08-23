@@ -74,7 +74,9 @@ use crate::ReadThreadByRolloutPathParams;
 use crate::ReadThreadParams;
 use crate::RenameThreadSectionParams;
 use crate::ResumeThreadParams;
+use crate::RevertLiveThreadParams;
 use crate::RevertThreadParams;
+use crate::RevertedLiveThread;
 use crate::SearchThreadOccurrencesParams;
 use crate::SearchThreadsParams;
 use crate::StoredModelContext;
@@ -496,6 +498,13 @@ impl ThreadStore for LocalThreadStore {
 
     fn revert_thread(&self, params: RevertThreadParams) -> ThreadStoreFuture<'_, ()> {
         Box::pin(async move { revert_thread::revert(self, params).await })
+    }
+
+    fn revert_live_thread(
+        &self,
+        params: RevertLiveThreadParams,
+    ) -> ThreadStoreFuture<'_, RevertedLiveThread> {
+        Box::pin(async move { revert_thread::revert_live(self, params).await })
     }
 
     fn read_thread(&self, params: ReadThreadParams) -> ThreadStoreFuture<'_, StoredThread> {
