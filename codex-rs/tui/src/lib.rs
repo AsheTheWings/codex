@@ -433,6 +433,10 @@ async fn connect_remote_app_server(
     Ok(AppServerClient::Remote(app_server))
 }
 
+fn local_daemon_version_matches(server_version: Option<&str>) -> bool {
+    server_version == Some(env!("CARGO_PKG_VERSION"))
+}
+
 #[cfg(unix)]
 async fn maybe_probe_default_daemon_socket(codex_home: &Path) -> Option<AbsolutePathBuf> {
     let socket_path = codex_app_server_client::app_server_control_socket_path(codex_home).ok()?;
@@ -492,9 +496,40 @@ async fn start_app_server(
         )
         .await
         .map(AppServerClient::InProcess),
-        AppServerTarget::LocalDaemon { endpoint } | AppServerTarget::Remote { endpoint } => {
-            connect_remote_app_server(endpoint.clone()).await
+        AppServerTarget::LocalDaemon { endpoint } => {
+            let app_server = connect_remote_app_server(endpoint.clone()).await?;
+            let server_version = match &app_server {
+                AppServerClient::Remote(client) => client.server_version(),
+                AppServerClient::InProcess(_) => None,
+            };
+            if local_daemon_version_matches(server_version) {
+                return Ok(app_server);
+            }
+
+            tracing::warn!(
+                client_version = env!("CARGO_PKG_VERSION"),
+                server_version,
+                "ignoring implicit local app-server daemon with mismatched version"
+            );
+            if let Err(err) = app_server.shutdown().await {
+                tracing::warn!(%err, "failed to disconnect from mismatched local app-server daemon");
+            }
+            start_embedded_app_server(
+                arg0_paths,
+                config,
+                cli_kv_overrides,
+                loader_overrides,
+                strict_config,
+                cloud_config_bundle,
+                feedback,
+                log_db,
+                state_db,
+                environment_manager,
+            )
+            .await
+            .map(AppServerClient::InProcess)
         }
+        AppServerTarget::Remote { endpoint } => connect_remote_app_server(endpoint.clone()).await,
     }
 }
 
@@ -2510,6 +2545,15 @@ mod tests {
 
         assert_eq!(target, AppServerTarget::Embedded);
         Ok(())
+    }
+
+    #[test]
+    fn local_daemon_requires_matching_version() {
+        assert!(local_daemon_version_matches(Some(env!(
+            "CARGO_PKG_VERSION"
+        ))));
+        assert!(!local_daemon_version_matches(Some("different-version")));
+        assert!(!local_daemon_version_matches(None));
     }
 
     #[test]
