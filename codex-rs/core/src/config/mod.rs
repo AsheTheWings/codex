@@ -45,6 +45,7 @@ use codex_config::types::MemoriesConfig;
 use codex_config::types::ModelAvailabilityNuxConfig;
 use codex_config::types::Notice;
 use codex_config::types::OAuthCredentialsStoreMode;
+use codex_config::types::PromptEditMode;
 use codex_config::types::ResumeCwdMode;
 use codex_config::types::SessionPickerViewMode;
 use codex_config::types::ToolSuggestConfig;
@@ -744,6 +745,9 @@ pub struct Config {
 
     /// Start the TUI in raw scrollback mode for copy-friendly transcript output.
     pub tui_raw_output_mode: bool,
+
+    /// Controls whether editing an earlier prompt overwrites or branches the thread.
+    pub tui_prompt_edit_mode: PromptEditMode,
 
     /// Start the TUI in the specified collaboration mode (plan/default).
 
@@ -4303,6 +4307,11 @@ impl Config {
                 .as_ref()
                 .map(|t| t.raw_output_mode)
                 .unwrap_or(false),
+            tui_prompt_edit_mode: cfg
+                .tui
+                .as_ref()
+                .map(|t| t.prompt_edit_mode)
+                .unwrap_or_default(),
             tui_alternate_screen: cfg
                 .tui
                 .as_ref()
