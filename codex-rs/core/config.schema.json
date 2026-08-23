@@ -2946,6 +2946,25 @@
       },
       "type": "object"
     },
+    "PromptEditMode": {
+      "description": "Controls how the TUI edits an earlier prompt in the current conversation.",
+      "oneOf": [
+        {
+          "description": "Remove the selected turn and everything after it from the current thread.",
+          "enum": [
+            "overwrite"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Preserve the current thread and continue from the selected prompt in a fork.",
+          "enum": [
+            "branch"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "RawMcpServerConfig": {
       "additionalProperties": false,
       "description": "Raw MCP config shape used for deserialization and supported-field JSON Schema generation.\n\nFields that are accepted only to produce targeted validation errors should be skipped in the generated schema.\n\nKeep `TryFrom<RawMcpServerConfig> for McpServerConfig` exhaustively destructuring this struct so new TOML fields cannot be added here without updating the validation/mapping logic that produces [`McpServerConfig`].",
@@ -3864,6 +3883,15 @@
           ],
           "default": "composer",
           "description": "Where the terminal pet should anchor vertically.\n\nDefaults to `composer`, which follows the current TUI composer viewport."
+        },
+        "prompt_edit_mode": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/PromptEditMode"
+            }
+          ],
+          "default": "overwrite",
+          "description": "Controls whether editing an earlier prompt overwrites the current thread or branches. Defaults to `overwrite`."
         },
         "raw_output_mode": {
           "default": false,
