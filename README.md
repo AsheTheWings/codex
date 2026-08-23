@@ -1,3 +1,9 @@
+> [!IMPORTANT]
+> This is the [AsheTheWings-maintained fork](https://github.com/AsheTheWings/codex)
+> of [OpenAI Codex](https://github.com/openai/codex), with behavior changes that
+> are not available upstream. The installation commands below install OpenAI
+> builds, not this fork. See [FORK.md](FORK.md) for the differences and source-build instructions.
+
 <p align="center"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
 <p align="center">
   <img src="https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png" alt="Codex CLI splash" width="80%" />

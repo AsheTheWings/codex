@@ -1,0 +1,29 @@
+fork:
+  upstream_project:
+    name: "OpenAI Codex"
+    repository: "https://github.com/openai/codex"
+    branch: "main"
+    license: "Apache-2.0"
+    authors: "OpenAI and Codex contributors"
+    homepage: "https://developers.openai.com/codex"
+    purl: "pkg:npm/%40openai/codex"
+  details:
+    name: "AsheTheWings/codex"
+    purpose: >-
+      Maintain selected user-facing Codex behavior while continuing to
+      integrate changes from the upstream project.
+    changes: >-
+      Restores individual terminal-command rendering and makes earlier-prompt
+      editing configurable, with in-place overwrite as the default. Prevents
+      implicit reuse of incompatible local daemons and preserves live session
+      runtimes during in-place paginated reverts. See FORK.md for the maintained
+      divergence ledger.
+    maintainer: "Ashe TheWings (https://github.com/AsheTheWings)"
+    created: "2026-05-05"
+  upstream_sync:
+    status: "actively-synchronized"
+    version: "main@83d1fe0e67b1323f71febc2925817732b449f1d9"
+    commit_hash: "83d1fe0e67b1323f71febc2925817732b449f1d9"
+    purl: "pkg:github/AsheTheWings/codex"
+    last_sync: "2026-08-23"
+spdx_version: "3.0"
