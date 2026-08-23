@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "project": "codex",
+  "repository": "AsheTheWings/codex",
+  "primaryBranch": "main",
+  "primaryCheckout": "codex",
+  "changeDelivery": {
+    "mode": "worktree-pr"
+  }
+}
