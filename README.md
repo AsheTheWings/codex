@@ -1,3 +1,11 @@
+> [!IMPORTANT]
+> This is the release-based
+> [AsheTheWings fork](https://github.com/AsheTheWings/codex) of
+> [OpenAI Codex](https://github.com/openai/codex). It is based on official
+> release `rust-v0.149.1` and carries intentional behavior changes. The
+> installation commands below install OpenAI builds, not this fork. See
+> [FORK.md](FORK.md) for provenance, differences, and build instructions.
+
 <p align="center"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
 <p align="center">
   <img src="https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png" alt="Codex CLI splash" width="80%" />

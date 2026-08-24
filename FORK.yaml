@@ -1,0 +1,32 @@
+fork:
+  upstream_project:
+    name: "OpenAI Codex"
+    repository: "https://github.com/openai/codex"
+    release_tag: "rust-v0.149.1"
+    release_commit: "ff29a44391deccde0aba0f8390337d7f3c319ea4"
+    license: "Apache-2.0"
+    authors: "OpenAI and Codex contributors"
+    homepage: "https://developers.openai.com/codex"
+    purl: "pkg:github/openai/codex@rust-v0.149.1"
+  details:
+    name: "AsheTheWings/codex"
+    purpose: >-
+      Maintain selected user-facing Codex behavior on reviewed official
+      releases.
+    changes: >-
+      Restores individual terminal-command rendering and makes earlier-prompt
+      editing configurable, with in-place overwrite as the default. Prevents
+      implicit reuse of incompatible local daemons and preserves live session
+      runtimes during in-place paginated reverts. See FORK.md for the maintained
+      divergence ledger.
+    maintainer: "Ashe TheWings (https://github.com/AsheTheWings)"
+    created: "2026-05-05"
+  upstream_baseline:
+    status: "pinned-release"
+    version: "rust-v0.149.1"
+    commit_hash: "ff29a44391deccde0aba0f8390337d7f3c319ea4"
+    reviewed: "2026-08-24"
+  maintenance:
+    compatibility_boundary: "official-release-tags"
+    update_strategy: "replay-fork-changes"
+spdx_version: "3.0"
