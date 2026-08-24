@@ -93,6 +93,10 @@ use codex_app_server_protocol::ThreadReadParams;
 use codex_app_server_protocol::ThreadReadResponse;
 use codex_app_server_protocol::ThreadResumeParams;
 use codex_app_server_protocol::ThreadResumeResponse;
+use codex_app_server_protocol::ThreadRevertParams;
+use codex_app_server_protocol::ThreadRevertResponse;
+use codex_app_server_protocol::ThreadRollbackParams;
+use codex_app_server_protocol::ThreadRollbackResponse;
 use codex_app_server_protocol::ThreadSetNameParams;
 use codex_app_server_protocol::ThreadSetNameResponse;
 use codex_app_server_protocol::ThreadSettingsUpdateParams;
@@ -910,6 +914,65 @@ impl AppServerSession {
         )
         .await?;
         Ok(response.thread)
+    }
+
+    /// Remove a selected turn and all later history while retaining the thread id.
+    pub(crate) async fn overwrite_thread_at(
+        &mut self,
+        config: &Config,
+        thread_id: ThreadId,
+        before_turn_id: String,
+        num_turns: usize,
+    ) -> Result<Thread> {
+        let metadata = self.thread_read(thread_id, /*include_turns*/ false).await?;
+        if metadata.ephemeral {
+            color_eyre::eyre::bail!(
+                "editing earlier prompts in overwrite mode is unavailable for ephemeral threads"
+            );
+        }
+
+        match metadata.history_mode {
+            ThreadHistoryMode::Paginated => {
+                let request_id = self.next_request_id();
+                let mut response: ThreadRevertResponse = self
+                    .client
+                    .request_typed(ClientRequest::ThreadRevert {
+                        request_id,
+                        params: ThreadRevertParams {
+                            thread_id: thread_id.to_string(),
+                            before_turn_id,
+                        },
+                    })
+                    .await
+                    .wrap_err("thread/revert failed while editing an earlier prompt")?;
+                self.hydrate_initial_thread_history(
+                    &mut response.thread,
+                    response.turns_backwards_cursor,
+                    response.items_backwards_cursor,
+                    Some(config),
+                    HistoryHydrationScope::Initial,
+                )
+                .await?;
+                Ok(response.thread)
+            }
+            ThreadHistoryMode::Legacy => {
+                let num_turns = u32::try_from(num_turns)
+                    .wrap_err("the selected prompt is too far back to overwrite safely")?;
+                let request_id = self.next_request_id();
+                let response: ThreadRollbackResponse = self
+                    .client
+                    .request_typed(ClientRequest::ThreadRollback {
+                        request_id,
+                        params: ThreadRollbackParams {
+                            thread_id: thread_id.to_string(),
+                            num_turns,
+                        },
+                    })
+                    .await
+                    .wrap_err("thread/rollback failed while editing an earlier prompt")?;
+                Ok(response.thread)
+            }
+        }
     }
 
     pub(crate) async fn thread_archive(&mut self, thread_id: ThreadId) -> Result<()> {
@@ -2369,6 +2432,32 @@ mod tests {
 
         assert_eq!(params.ephemeral, Some(true));
         assert_eq!(params.history_mode, None);
+    }
+
+    #[tokio::test]
+    async fn overwrite_rejects_ephemeral_threads_without_branching() -> Result<()> {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let mut config = build_config(&temp_dir).await;
+        config.ephemeral = true;
+        let mut app_server = crate::start_embedded_app_server_for_picker(&config).await?;
+        let started = app_server.start_thread(&config).await?;
+
+        let error = app_server
+            .overwrite_thread_at(
+                &config,
+                started.session.thread_id,
+                "turn-1".to_string(),
+                /*num_turns*/ 1,
+            )
+            .await
+            .expect_err("ephemeral overwrite should fail explicitly");
+
+        assert_eq!(
+            error.to_string(),
+            "editing earlier prompts in overwrite mode is unavailable for ephemeral threads"
+        );
+        app_server.shutdown().await?;
+        Ok(())
     }
 
     #[tokio::test]

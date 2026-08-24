@@ -3,7 +3,9 @@ use crate::config::ConstraintResult;
 use crate::elicitation::ElicitationRegistration;
 use crate::session::SessionIo;
 use crate::session::SessionSettingsUpdate;
+use crate::session::new_submission_id;
 use crate::session::session::Session;
+use arc_swap::ArcSwapOption;
 use codex_diagnostics::Gauge;
 use codex_diagnostics::GaugeGuard;
 use codex_exec_server::SelectedCapabilityRootsStatus;
@@ -11,6 +13,7 @@ use codex_extension_api::ThreadIdleCause;
 use codex_features::Feature;
 use codex_history::RolloutItem;
 use codex_otel::SessionTelemetry;
+use codex_otel::current_span_w3c_trace_context;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::CollaborationMode;
@@ -35,6 +38,7 @@ use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SessionConfiguredEvent;
 use codex_protocol::protocol::SessionSource;
+use codex_protocol::protocol::Submission;
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::protocol::ThreadMemoryMode;
 use codex_protocol::protocol::ThreadSettingsSnapshot;
@@ -62,6 +66,7 @@ use rmcp::model::ReadResourceRequestParams;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::sync::oneshot;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
@@ -147,7 +152,7 @@ pub struct CodexThread {
     pub(crate) io: SessionIo,
     pub(crate) session_source: SessionSource,
     session_configured: SessionConfiguredEvent,
-    rollout_path: Option<PathBuf>,
+    rollout_path: ArcSwapOption<PathBuf>,
     out_of_band_elicitations: Mutex<OutOfBandElicitations>,
     _diagnostics_guard: GaugeGuard,
 }
@@ -181,7 +186,7 @@ impl CodexThread {
             io,
             session_source,
             session_configured,
-            rollout_path,
+            rollout_path: ArcSwapOption::from(rollout_path.map(Arc::new)),
             out_of_band_elicitations: Mutex::new(OutOfBandElicitations::default()),
             _diagnostics_guard: LIVE_THREADS.track(),
         }
@@ -545,7 +550,34 @@ impl CodexThread {
     }
 
     pub fn rollout_path(&self) -> Option<PathBuf> {
-        self.rollout_path.clone()
+        self.rollout_path
+            .load_full()
+            .map(|rollout_path| rollout_path.as_ref().clone())
+    }
+
+    /// Reverts paginated history while preserving this thread's session-scoped runtimes.
+    pub async fn revert(&self, before_turn_id: String) -> CodexResult<PathBuf> {
+        let (reply, result) = oneshot::channel();
+        self.io
+            .tx_sub
+            .send(Submission {
+                id: new_submission_id(),
+                op: Op::ThreadRevert {
+                    before_turn_id,
+                    reply,
+                },
+                trace: current_span_w3c_trace_context(),
+                parent_turn_id: None,
+                root_turn_id: None,
+            })
+            .await
+            .map_err(|_| CodexErr::Fatal("thread session has stopped".to_string()))?;
+        let rollout_path = result
+            .await
+            .map_err(|_| CodexErr::Fatal("thread revert reply was lost".to_string()))??;
+        self.rollout_path
+            .store(Some(Arc::new(rollout_path.clone())));
+        Ok(rollout_path)
     }
 
     pub fn session_configured(&self) -> SessionConfiguredEvent {

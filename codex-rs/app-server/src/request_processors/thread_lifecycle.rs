@@ -355,14 +355,6 @@ pub(super) async fn ensure_listener_task_running(
                         fallback_model_provider.clone(),
                     )
                     .await;
-                    if matches!(event.msg, EventMsg::ShutdownComplete)
-                        && let Some(completion_tx) = thread_state
-                            .lock()
-                            .await
-                            .take_shutdown_drain_waiter()
-                    {
-                        let _ = completion_tx.send(());
-                    }
                 }
                 unloading_watchers_open = unloading_state.wait_for_unloading_trigger() => {
                     if !unloading_watchers_open {

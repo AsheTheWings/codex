@@ -58,6 +58,7 @@ use codex_config::types::NotificationMethod;
 use codex_config::types::Notifications;
 use codex_config::types::OtelConfigToml;
 use codex_config::types::OtelExporterKind;
+use codex_config::types::PromptEditMode;
 use codex_config::types::ResumeCwdMode;
 use codex_config::types::SandboxWorkspaceWrite;
 use codex_config::types::SessionPickerViewMode;
@@ -1190,6 +1191,7 @@ fn config_toml_deserializes_model_availability_nux() {
             show_tooltips: true,
             vim_mode_default: false,
             raw_output_mode: false,
+            prompt_edit_mode: PromptEditMode::Overwrite,
             alternate_screen: AltScreenMode::default(),
             status_line: None,
             status_line_use_colors: true,
@@ -4269,6 +4271,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
             show_tooltips: true,
             vim_mode_default: false,
             raw_output_mode: false,
+            prompt_edit_mode: PromptEditMode::Overwrite,
             alternate_screen: AltScreenMode::Auto,
             status_line: None,
             status_line_use_colors: true,
@@ -4283,6 +4286,54 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
             terminal_resize_reflow_max_rows: None,
         }
     );
+}
+
+#[test]
+fn tui_prompt_edit_mode_defaults_to_overwrite_and_accepts_branch() {
+    let default = toml::from_str::<ConfigToml>("[tui]")
+        .expect("TUI config without prompt_edit_mode should succeed");
+    assert_eq!(
+        default.tui.map(|tui| tui.prompt_edit_mode),
+        Some(PromptEditMode::Overwrite)
+    );
+
+    let branch = toml::from_str::<ConfigToml>("[tui]\nprompt_edit_mode = \"branch\"")
+        .expect("branch prompt edit mode should deserialize");
+    assert_eq!(
+        branch.tui.map(|tui| tui.prompt_edit_mode),
+        Some(PromptEditMode::Branch)
+    );
+
+    let error = toml::from_str::<ConfigToml>("[tui]\nprompt_edit_mode = \"truncate\"")
+        .expect_err("unknown prompt edit modes should be rejected");
+    assert!(error.to_string().contains("unknown variant `truncate`"));
+}
+
+#[tokio::test]
+async fn runtime_config_resolves_prompt_edit_mode() {
+    let default = Config::load_from_base_config_with_overrides(
+        ConfigToml::default(),
+        ConfigOverrides::default(),
+        tempdir().expect("tempdir").abs(),
+    )
+    .await
+    .expect("load default config");
+    assert_eq!(default.tui_prompt_edit_mode, PromptEditMode::Overwrite);
+
+    let branch = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            tui: Some(Tui {
+                prompt_edit_mode: PromptEditMode::Branch,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        ConfigOverrides::default(),
+        tempdir().expect("tempdir").abs(),
+    )
+    .await
+    .expect("load branch prompt edit config");
+    assert_eq!(branch.tui_prompt_edit_mode, PromptEditMode::Branch);
 }
 
 #[tokio::test]

@@ -2,6 +2,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -1357,10 +1359,21 @@ impl ServerHandler for ToolAppsMcpServer {
 }
 
 pub(super) async fn start_mcp_server() -> Result<(String, JoinHandle<()>)> {
+    let (url, handle, _session_starts) = start_counted_mcp_server().await?;
+    Ok((url, handle))
+}
+
+pub(super) async fn start_counted_mcp_server() -> Result<(String, JoinHandle<()>, Arc<AtomicUsize>)>
+{
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
+    let session_starts = Arc::new(AtomicUsize::new(0));
+    let session_starts_for_service = Arc::clone(&session_starts);
     let mcp_service = StreamableHttpService::new(
-        || Ok(ToolAppsMcpServer),
+        move || {
+            session_starts_for_service.fetch_add(1, Ordering::SeqCst);
+            Ok(ToolAppsMcpServer)
+        },
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
@@ -1370,7 +1383,7 @@ pub(super) async fn start_mcp_server() -> Result<(String, JoinHandle<()>)> {
         let _ = axum::serve(listener, router).await;
     });
 
-    Ok((format!("http://{addr}"), handle))
+    Ok((format!("http://{addr}"), handle, session_starts))
 }
 
 async fn serve_environment_until_shutdown(

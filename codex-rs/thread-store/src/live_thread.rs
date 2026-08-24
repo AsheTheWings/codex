@@ -18,9 +18,12 @@ use crate::LocalThreadStore;
 use crate::PersistContext;
 use crate::ReadThreadParams;
 use crate::ResumeThreadParams;
+use crate::RevertLiveThreadParams;
+use crate::StoredModelContext;
 use crate::StoredThread;
 use crate::StoredThreadHistory;
 use crate::ThreadMetadataPatch;
+use crate::ThreadPersistenceMetadata;
 use crate::ThreadStore;
 use crate::ThreadStoreError;
 use crate::ThreadStoreResult;
@@ -269,6 +272,54 @@ impl LiveThread {
         self.thread_store.flush_thread(self.thread_id).await?;
         self.flush_pending_metadata_update_for_existing_history()
             .await
+    }
+
+    /// Reverts durable paginated history while retaining this live persistence handle.
+    pub async fn revert(
+        &self,
+        before_turn_id: String,
+        metadata: ThreadPersistenceMetadata,
+    ) -> ThreadStoreResult<(PathBuf, StoredModelContext)> {
+        self.flush_pending_metadata_update_for_existing_history()
+            .await?;
+        let reverted = self
+            .thread_store
+            .revert_live_thread(RevertLiveThreadParams {
+                thread_id: self.thread_id,
+                before_turn_id,
+                metadata: metadata.clone(),
+            })
+            .await?;
+        let rollout_path = reverted.rollout_path;
+        let model_context = reverted.model_context;
+        let resume_params = ResumeThreadParams {
+            thread_id: self.thread_id,
+            rollout_path: Some(rollout_path.clone()),
+            history: Some(Arc::new(model_context.items.clone())),
+            include_archived: false,
+            metadata,
+        };
+        let stored_metadata = if let Some(local_store) = self
+            .thread_store
+            .as_any()
+            .downcast_ref::<LocalThreadStore>()
+            && let Some(state_db) = local_store.state_db().await
+        {
+            state_db
+                .get_thread(self.thread_id)
+                .await
+                .map_err(|err| ThreadStoreError::Internal {
+                    message: format!(
+                        "failed to read thread metadata for {}: {err}",
+                        self.thread_id
+                    ),
+                })?
+        } else {
+            None
+        };
+        *self.metadata_sync.lock().await =
+            ThreadMetadataSync::for_resume(&resume_params, stored_metadata.as_ref());
+        Ok((rollout_path, model_context))
     }
 
     pub async fn shutdown(&self) -> ThreadStoreResult<()> {

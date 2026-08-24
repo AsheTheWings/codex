@@ -657,6 +657,17 @@ pub enum TuiPetAnchor {
     ScreenBottom,
 }
 
+/// Controls how the TUI edits an earlier prompt in the current conversation.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum PromptEditMode {
+    /// Remove the selected turn and everything after it from the current thread.
+    #[default]
+    Overwrite,
+    /// Preserve the current thread and continue from the selected prompt in a fork.
+    Branch,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct TuiNotificationSettings {
@@ -713,6 +724,11 @@ pub struct Tui {
     /// Defaults to `false`.
     #[serde(default)]
     pub raw_output_mode: bool,
+
+    /// Controls whether editing an earlier prompt overwrites the current thread or branches.
+    /// Defaults to `overwrite`.
+    #[serde(default)]
+    pub prompt_edit_mode: PromptEditMode,
 
     /// Controls whether the TUI uses the terminal's alternate screen buffer.
     ///

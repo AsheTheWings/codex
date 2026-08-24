@@ -84,6 +84,7 @@ use codex_app_server_protocol::ServerRequest;
 use codex_app_server_protocol::Thread;
 use codex_app_server_protocol::ThreadArchivedNotification;
 use codex_app_server_protocol::ThreadClosedNotification;
+use codex_app_server_protocol::ThreadHistoryMode;
 use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::ThreadSettings;
 use codex_app_server_protocol::ThreadSettingsUpdatedNotification;
@@ -6490,11 +6491,11 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
 
     app.apply_backtrack_selection(selection);
     let event = std::iter::from_fn(|| app_event_rx.try_recv().ok())
-        .find(|event| matches!(event, AppEvent::ForkSessionForPromptEdit { .. }))
-        .expect("prompt edit fork should be requested");
+        .find(|event| matches!(event, AppEvent::EditEarlierPrompt { .. }))
+        .expect("prompt edit should be requested");
     assert_matches!(
         event,
-        AppEvent::ForkSessionForPromptEdit {
+        AppEvent::EditEarlierPrompt {
             thread_id,
             nth_user_message,
             prompt,
@@ -6512,10 +6513,10 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
 }
 
 #[tokio::test]
-async fn backtrack_branch_failure_restores_selected_prompt_snapshot() {
+async fn backtrack_edit_failure_restores_selected_prompt_snapshot() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
 
-    app.restore_backtrack_prompt_after_branch_error(
+    app.restore_backtrack_prompt_after_edit_error(
         crate::chatwidget::UserMessage::from("edit this prompt"),
         "branch unavailable",
     );
@@ -6529,10 +6530,7 @@ async fn backtrack_branch_failure_restores_selected_prompt_snapshot() {
         other => panic!("expected InsertHistoryCell event, got {other:?}"),
     };
     let rendered = lines_to_single_string(&cell.display_lines(/*width*/ 80));
-    assert_app_snapshot!(
-        "backtrack_branch_failure_restores_selected_prompt",
-        rendered
-    );
+    assert_app_snapshot!("backtrack_edit_failure_restores_selected_prompt", rendered);
 }
 
 #[tokio::test]
@@ -6986,10 +6984,7 @@ async fn remembered_current_cwd_stays_at_launch_across_in_app_resumes() -> Resul
     Ok(())
 }
 
-#[tokio::test]
-async fn prompt_edit_forks_before_selected_prompt_and_preserves_source() -> Result<()> {
-    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
-    let config = app.chat_widget.config_ref().clone();
+async fn create_two_turn_prompt_edit_rollout(config: &Config) -> Result<(ThreadId, PathBuf)> {
     let filename_ts = "2025-01-05T12-00-00";
     let source_thread_id = app_test_support::create_fake_rollout(
         config.codex_home.as_path(),
@@ -7045,7 +7040,155 @@ async fn prompt_edit_forks_before_selected_prompt_and_preserves_source() -> Resu
         }
     }
 
-    let source_thread_id = ThreadId::from_string(&source_thread_id)?;
+    Ok((ThreadId::from_string(&source_thread_id)?, source_path))
+}
+
+#[tokio::test]
+async fn prompt_edit_overwrites_legacy_thread_by_default() -> Result<()> {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let config = app.chat_widget.config_ref().clone();
+    let (source_thread_id, _source_path) = create_two_turn_prompt_edit_rollout(&config).await?;
+    let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(&config)).await?;
+    let started = app_server
+        .resume_thread(
+            config.clone(),
+            source_thread_id,
+            crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig,
+        )
+        .await?;
+    assert_eq!(
+        app_server
+            .thread_read(source_thread_id, /*include_turns*/ false)
+            .await?
+            .history_mode,
+        ThreadHistoryMode::Legacy
+    );
+    app.enqueue_primary_thread_session(started.session, started.turns)
+        .await?;
+    while app_event_rx.try_recv().is_ok() {}
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+
+    Box::pin(app.handle_event(
+        &mut tui,
+        &mut app_server,
+        AppEvent::EditEarlierPrompt {
+            thread_id: source_thread_id,
+            nth_user_message: 1,
+            prompt: crate::chatwidget::UserMessage {
+                text: "selected prompt [Image #1]".to_string(),
+                local_images: vec![crate::bottom_pane::LocalImageAttachment {
+                    placeholder: "[Image #1]".to_string(),
+                    path: PathBuf::from("/tmp/fake-image.png"),
+                }],
+                remote_image_urls: vec!["https://example.com/backtrack.png".to_string()],
+                text_elements: Vec::new(),
+                mention_bindings: Vec::new(),
+            },
+        },
+    ))
+    .await?;
+
+    assert_eq!(app.chat_widget.thread_id(), Some(source_thread_id));
+    assert_eq!(
+        app_server
+            .thread_read(source_thread_id, /*include_turns*/ true)
+            .await?
+            .turns
+            .iter()
+            .map(|turn| turn.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["turn-1"]
+    );
+    assert_eq!(
+        app.chat_widget.composer_text_with_pending(),
+        "selected prompt [Image #1]"
+    );
+    let history = std::iter::from_fn(|| app_event_rx.try_recv().ok())
+        .filter_map(|event| match event {
+            AppEvent::InsertHistoryCell(cell) => {
+                Some(lines_to_single_string(&cell.display_lines(/*width*/ 120)))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(!history.iter().any(|line| line.contains("new conversation")));
+    app_server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn prompt_edit_reverts_paginated_thread_before_first_prompt() -> Result<()> {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let config = app.chat_widget.config_ref().clone();
+    let source_thread_id = ThreadId::from_string(
+        &app_test_support::create_fake_paginated_rollout(
+            config.codex_home.as_path(),
+            "2025-01-05T12-00-01",
+            "2025-01-05T12:00:01Z",
+            "first paginated prompt",
+            Some(config.model_provider_id.as_str()),
+            /*git_info*/ None,
+        )
+        .expect("materialized paginated rollout should be created"),
+    )?;
+    let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(&config)).await?;
+    let started = app_server
+        .resume_thread(
+            config.clone(),
+            source_thread_id,
+            crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig,
+        )
+        .await?;
+    assert_eq!(
+        app_server
+            .thread_read(source_thread_id, /*include_turns*/ false)
+            .await?
+            .history_mode,
+        ThreadHistoryMode::Paginated
+    );
+    app.enqueue_primary_thread_session(started.session, started.turns)
+        .await?;
+    while app_event_rx.try_recv().is_ok() {}
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+
+    Box::pin(app.handle_event(
+        &mut tui,
+        &mut app_server,
+        AppEvent::EditEarlierPrompt {
+            thread_id: source_thread_id,
+            nth_user_message: 0,
+            prompt: crate::chatwidget::UserMessage::from("first paginated prompt"),
+        },
+    ))
+    .await?;
+
+    assert_eq!(app.chat_widget.thread_id(), Some(source_thread_id));
+    assert!(
+        app_server
+            .thread_read(source_thread_id, /*include_turns*/ true)
+            .await?
+            .turns
+            .is_empty()
+    );
+    assert!(!app_server.has_older_history(source_thread_id));
+    assert_eq!(
+        app.chat_widget.composer_text_with_pending(),
+        "first paginated prompt"
+    );
+    app_server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn prompt_edit_forks_before_selected_prompt_and_preserves_source() -> Result<()> {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let config = app.chat_widget.config_ref().clone();
+    std::fs::write(
+        config.codex_home.join("config.toml"),
+        "[tui]\nprompt_edit_mode = \"branch\"\n",
+    )?;
+    let (source_thread_id, source_path) = create_two_turn_prompt_edit_rollout(&config).await?;
+
     let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(&config)).await?;
     let started = app_server
         .resume_thread(
@@ -7103,7 +7246,7 @@ async fn prompt_edit_forks_before_selected_prompt_and_preserves_source() -> Resu
     let control = Box::pin(app.handle_event(
         &mut tui,
         &mut app_server,
-        AppEvent::ForkSessionForPromptEdit {
+        AppEvent::EditEarlierPrompt {
             thread_id: source_thread_id,
             nth_user_message: 1,
             prompt: prompt.clone(),
@@ -7175,6 +7318,10 @@ async fn prompt_edit_forks_before_selected_prompt_and_preserves_source() -> Resu
 async fn prompt_edit_before_first_prompt_starts_fresh_thread() -> Result<()> {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     let config = app.chat_widget.config_ref().clone();
+    std::fs::write(
+        config.codex_home.join("config.toml"),
+        "[tui]\nprompt_edit_mode = \"branch\"\n",
+    )?;
     let source_thread_id = app_test_support::create_fake_rollout(
         config.codex_home.as_path(),
         "2025-01-05T12-00-00",
@@ -7201,7 +7348,7 @@ async fn prompt_edit_before_first_prompt_starts_fresh_thread() -> Result<()> {
     let control = Box::pin(app.handle_event(
         &mut tui,
         &mut app_server,
-        AppEvent::ForkSessionForPromptEdit {
+        AppEvent::EditEarlierPrompt {
             thread_id: source_thread_id,
             nth_user_message: 0,
             prompt: crate::chatwidget::UserMessage::from("first prompt"),
