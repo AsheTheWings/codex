@@ -4,7 +4,7 @@ use pretty_assertions::assert_eq;
 #[test]
 fn helper_output_errors_do_not_echo_secrets() {
     for output in [
-        br#"{"Authorization":"secret"}"#.as_slice(),
+        br#"{"Host":"secret"}"#.as_slice(),
         br#"{"secret":"secret","secret":"secret"}"#.as_slice(),
         br#"{"secret":"secret","Secret":"secret"}"#.as_slice(),
     ] {
@@ -114,12 +114,23 @@ async fn connection_headers_are_cached_and_origin_bound() {
 
     async fn handle(headers: axum::http::HeaderMap) -> StatusCode {
         assert_eq!(
+            headers.get("authorization"),
+            Some(&HeaderValue::from_static("Bearer helper"))
+        );
+        assert_eq!(
             headers.get("proxy-authorization"),
             Some(&HeaderValue::from_static("Bearer token"))
         );
         assert_eq!(
             headers.get("x-label"),
             Some(&HeaderValue::from_bytes("café".as_bytes()).unwrap())
+        );
+        StatusCode::NO_CONTENT
+    }
+    async fn handle_explicit_authorization(headers: axum::http::HeaderMap) -> StatusCode {
+        assert_eq!(
+            headers.get("authorization"),
+            Some(&HeaderValue::from_static("Bearer explicit"))
         );
         StatusCode::NO_CONTENT
     }
@@ -144,17 +155,20 @@ async fn connection_headers_are_cached_and_origin_bound() {
         .expect("bind test server");
     let url = format!("http://{}/mcp", listener.local_addr().unwrap());
     let redirect_url = cross_url.clone();
-    let app = Router::new().route("/mcp", post(handle)).route(
-        "/redirect",
-        get(move || std::future::ready(Redirect::temporary(&redirect_url))),
-    );
+    let app = Router::new()
+        .route("/mcp", post(handle))
+        .route("/explicit", post(handle_explicit_authorization))
+        .route(
+            "/redirect",
+            get(move || std::future::ready(Redirect::temporary(&redirect_url))),
+        );
     tokio::spawn(async move {
         axum::serve(listener, app)
             .await
             .expect("serve test requests");
     });
     let command = format!(
-        "printf x >> '{}'; printf '{{\"Proxy-Authorization\":\"Bearer token\",\"X-Label\":\"café\"}}'",
+        "printf x >> '{}'; printf '{{\"Authorization\":\"Bearer helper\",\"Proxy-Authorization\":\"Bearer token\",\"X-Label\":\"café\"}}'",
         invocation_file.display(),
     );
     let inner: Arc<dyn HttpClient> = Arc::new(RouteAwareHttpClient::new(HttpClientFactory::new(
@@ -193,6 +207,16 @@ async fn connection_headers_are_cached_and_origin_bound() {
     );
     assert_eq!(left.expect("left request").0.status, 204);
     assert_eq!(right.expect("right request").0.status, 204);
+    let mut explicit_request = request("explicit-authorization");
+    explicit_request.url = url.replace("/mcp", "/explicit");
+    explicit_request.headers.push(HttpHeader {
+        name: "Authorization".to_string(),
+        value: "Bearer explicit".to_string(),
+    });
+    assert_eq!(
+        client.http_request(explicit_request).await.unwrap().status,
+        204
+    );
     assert_eq!(
         std::fs::read_to_string(&invocation_file).expect("helper invocation count"),
         "x"

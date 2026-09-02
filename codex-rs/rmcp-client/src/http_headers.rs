@@ -177,6 +177,15 @@ impl HttpHeadersClient {
             None => self.provider.headers().await?,
         };
         for (name, value) in headers.iter() {
+            // Explicit bearer tokens and MCP OAuth credentials win over helper output.
+            if name == http::header::AUTHORIZATION
+                && params
+                    .headers
+                    .iter()
+                    .any(|header| header.name.eq_ignore_ascii_case("authorization"))
+            {
+                continue;
+            }
             params
                 .headers
                 .retain(|header| !header.name.eq_ignore_ascii_case(name.as_str()));
@@ -363,13 +372,12 @@ fn parse_helper_output(stdout: Vec<u8>) -> Result<HeaderMap> {
     for (name, value) in headers.entries {
         let name = HeaderName::from_bytes(name.as_bytes())
             .map_err(|_| anyhow!("MCP HTTP headers helper returned an invalid header name"))?;
-        // Helper values replace same-name configured headers; bearer/OAuth owns Authorization.
+        // Helper values replace same-name configured headers, except explicit Authorization.
         // Google IAP uses Proxy-Authorization alongside application Authorization. For HTTPS MCP
         // URLs it is sent through the forward-proxy tunnel to IAP, not used as CONNECT auth.
         if matches!(
             name.as_str(),
             "accept"
-                | "authorization"
                 | "connection"
                 | "content-encoding"
                 | "content-length"
